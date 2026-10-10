@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gzipSync } from 'node:zlib';
-import { buildOverview, invalidateSnapshot } from '@/lib/server/overview';
+import { buildOverview, editDemoTransaction, invalidateSnapshot } from '@/lib/server/overview';
 import { getActual } from '@/lib/server/actual';
+import { isDemo } from '@/lib/server/settings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,9 +36,13 @@ export async function PATCH(request: NextRequest) {
     if (notes !== undefined) fields.notes = notes;
     if (typeof amount === 'number' && Number.isFinite(amount)) fields.amount = Math.round(amount * 100);
     if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) fields.date = date;
-    const api = await getActual();
-    await api.updateTransaction(id, fields);
-    invalidateSnapshot();
+    if (isDemo()) {
+      await editDemoTransaction(id, fields);
+    } else {
+      const api = await getActual();
+      await api.updateTransaction(id, fields);
+      invalidateSnapshot();
+    }
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

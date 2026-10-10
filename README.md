@@ -43,6 +43,11 @@ The bundled Actual API must match your actual-server's major version. Image tags
 
 ## Configuration
 
+The gear icon opens the settings page: excluded accounts, tags, number format, history start and
+sync interval. Changes apply at once and are saved to `/data/settings.json`. The environment
+variables below are the defaults; **Reset to defaults** on the settings page goes back to them, and
+headless setups can use env alone.
+
 | Variable | Default | Meaning |
 |---|---|---|
 | `ACTUAL_SERVER_URL` | required | Your actual-server URL |
@@ -57,9 +62,20 @@ The bundled Actual API must match your actual-server's major version. Image tags
 | `HIDDEN_TAGS` | unset | Tags hidden from the tag strip (automation markers), comma-separated |
 | `LOCALE` / `CURRENCY` | `en-US` / `EUR` | Number formatting |
 | `HISTORY_SINCE` | 13 months ago | Earliest date loaded from the budget |
+| `DEMO` | `0` | `1` serves a made-up budget, no Actual server needed (see below) |
 
 Transfers between accounts and starting balances never count in the KPIs; transfers and
 excluded-account rows still appear in the list, greyed out.
+
+## Demo mode
+
+`DEMO=1` replaces your budget with generated data (14 months ending today, fixed seed): handy to
+try the dashboard before pointing it at a server. Edits stay in memory and reset every 30 minutes;
+settings are read-only.
+
+```bash
+docker compose -f docker-compose.demo.yml up -d
+```
 
 ## Development
 

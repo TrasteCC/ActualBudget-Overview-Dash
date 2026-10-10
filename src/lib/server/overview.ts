@@ -1,12 +1,15 @@
 import { getActual, syncNow } from './actual';
-import { getSettings, Settings } from './settings';
+import { demoSnapshot } from './demo';
+import { getSettings, isDemo, Settings } from './settings';
 
 // The Overview payload: last 12 months of counted totals, per-month category spend and the decorated
 // transaction rows, built from one in-memory snapshot of the budget. All filtering happens client-side.
 
 const SNAPSHOT_TTL_MS = 2 * 60 * 1000;
+// Demo edits live in the in-memory snapshot until it is regenerated.
+const DEMO_RESET_MIN = 30;
 
-interface RawTx {
+export interface RawTx {
   id: string;
   date: string;
   amount: number;
@@ -20,7 +23,7 @@ interface RawTx {
   subtransactions?: RawTx[];
 }
 
-interface Snapshot {
+export interface Snapshot {
   accounts: { id: string; name: string; offbudget: boolean; closed: boolean }[];
   categories: { id: string; name: string; group_id: string; is_income?: boolean }[];
   groups: { id: string; name: string }[];
@@ -50,13 +53,17 @@ export interface OverviewData {
   categoryGroup: Record<string, string>;
   transactions: OverviewTransaction[];
   metadata: { updated: string; allCategories: { id: string; name: string }[]; allPayees: { id: string; name: string }[] };
-  settings: { actualUrl: string; savingsTag: string; hiddenTags: string[]; locale: string; currency: string };
+  settings: { actualUrl: string; savingsTag: string; hiddenTags: string[]; locale: string; currency: string; demo: boolean };
 }
 
-let cache: { at: number; data: Snapshot } | null = null;
-let inflight: Promise<Snapshot> | null = null;
+// On globalThis so every route bundle shares one snapshot (the settings route invalidates it).
+interface State { cache: { at: number; data: Snapshot } | null; inflight: Promise<Snapshot> | null }
+const g = globalThis as typeof globalThis & { __abodOverview?: State };
+const state = (g.__abodOverview ??= { cache: null, inflight: null });
 
+// The data source seam: the real budget, or the made-up one in demo mode (never touches Actual).
 async function loadSnapshot(settings: Settings): Promise<Snapshot> {
+  if (isDemo()) return demoSnapshot();
   const api = await getActual();
   const [accounts, categories, groups, payees] = await Promise.all([
     api.getAccounts(), api.getCategories(), api.getCategoryGroups(), api.getPayees(),
@@ -86,17 +93,25 @@ async function loadSnapshot(settings: Settings): Promise<Snapshot> {
   };
 }
 
-export function invalidateSnapshot() { cache = null; }
+export function invalidateSnapshot() { state.cache = null; }
 
-async function getSnapshot(settings: Settings, refresh: boolean): Promise<Snapshot> {
-  if (refresh) { await syncNow(); cache = null; }
-  if (cache && Date.now() - cache.at < SNAPSHOT_TTL_MS) return cache.data;
-  if (!inflight) {
-    inflight = loadSnapshot(settings)
-      .then(data => { cache = { at: Date.now(), data }; return data; })
-      .finally(() => { inflight = null; });
+export async function getSnapshot(settings: Settings, refresh = false): Promise<Snapshot> {
+  if (refresh && !isDemo()) { await syncNow(); state.cache = null; }
+  const ttl = isDemo() ? DEMO_RESET_MIN * 60_000 : SNAPSHOT_TTL_MS;
+  if (state.cache && Date.now() - state.cache.at < ttl) return state.cache.data;
+  if (!state.inflight) {
+    state.inflight = loadSnapshot(settings)
+      .then(data => { state.cache = { at: Date.now(), data }; return data; })
+      .finally(() => { state.inflight = null; });
   }
-  return inflight;
+  return state.inflight;
+}
+
+// PATCH in demo mode: edit the in-memory snapshot only. Notes are capped since the public demo is shared.
+export async function editDemoTransaction(id: string, fields: Record<string, unknown>) {
+  const t = (await getSnapshot(getSettings())).rawTrans.find(r => r.id === id);
+  if (!t) throw new Error('Transaction not found');
+  Object.assign(t, fields, typeof fields.notes === 'string' ? { notes: fields.notes.slice(0, 120) } : {});
 }
 
 const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -189,6 +204,7 @@ export async function buildOverview(refresh = false): Promise<OverviewData> {
       hiddenTags: settings.hiddenTags,
       locale: settings.locale,
       currency: settings.currency,
+      demo: isDemo(),
     },
   };
 }

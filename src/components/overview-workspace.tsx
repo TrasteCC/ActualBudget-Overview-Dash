@@ -1,7 +1,8 @@
 'use client';
 
 import React, { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { ExternalLink, Pencil, RefreshCw, Search, X } from 'lucide-react';
+import Link from 'next/link';
+import { ExternalLink, Pencil, RefreshCw, Search, Settings as SettingsIcon, X } from 'lucide-react';
 import { makeFmt, Fmt } from '@/lib/format';
 import type { OverviewData, OverviewTransaction } from '@/lib/server/overview';
 
@@ -202,10 +203,17 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
             {/* ── Sidebar: views + period + groups (a horizontal strip on mobile) ── */}
             <aside className="lg:sticky lg:top-0 lg:h-screen lg:w-[236px] lg:shrink-0 lg:overflow-y-auto bg-[#0e131c] border-b lg:border-b-0 lg:border-r border-[#1a2230] px-3 py-3 lg:py-5 flex flex-col gap-4 lg:gap-5">
                 <div className="shrink-0 flex items-center gap-2 px-2">
-                    <a href={data.settings.actualUrl || '#'} target="_blank" rel="noreferrer" className={`flex items-center gap-2 text-base font-bold rounded ${focus} hover:text-blue-300 transition-colors`}>
-                        Actual Budget <ExternalLink className="w-3 h-3 text-[#66738a]" />
-                    </a>
-                    <span className="w-[7px] h-[7px] rounded-full bg-emerald-400" aria-label="Live" />
+                    {data.settings.demo ? (
+                        <span className="text-base font-bold">Actual Budget</span>
+                    ) : (
+                        <a href={data.settings.actualUrl || '#'} target="_blank" rel="noreferrer" className={`flex items-center gap-2 text-base font-bold rounded ${focus} hover:text-blue-300 transition-colors`}>
+                            Actual Budget <ExternalLink className="w-3 h-3 text-[#66738a]" />
+                        </a>
+                    )}
+                    <span className={`w-[7px] h-[7px] rounded-full ${data.settings.demo ? 'bg-amber-400' : 'bg-emerald-400'}`} aria-label={data.settings.demo ? 'Demo' : 'Live'} />
+                    <Link href="/settings" title="Settings" aria-label="Settings" className={`ml-auto p-1 rounded text-[#66738a] hover:text-white transition-colors ${focus}`}>
+                        <SettingsIcon className="w-4 h-4" />
+                    </Link>
                 </div>
 
                 {(
@@ -275,6 +283,11 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
             </aside>
 
             <main className="flex-1 min-w-0 flex flex-col gap-3 px-3 sm:px-5 pt-4 pb-32">
+                {data.settings.demo && (
+                    <p className="rounded-lg border border-amber-400/30 bg-amber-400/[0.07] px-3 py-1.5 text-xs text-amber-200">
+                        Demo data — nothing here is real. Edits are shared and reset every half hour.
+                    </p>
+                )}
                 {/* ── Top bar: search, active filters, refresh ── */}
                 <div className="flex flex-wrap items-center gap-2">
                     {(

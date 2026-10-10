@@ -1,0 +1,10 @@
+# Made-up data, no Actual server needed: docker compose -f docker-compose.demo.yml up -d
+services:
+  overview-demo:
+    image: ghcr.io/trastecc/actualbudget-overview-dash:latest
+    container_name: actualbudget-overview-demo
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DEMO: "1"
