@@ -8,9 +8,12 @@ export async function POST(req: Request) {
   try { ({ password } = await req.json()); } catch { /* fall through */ }
   if (password !== expected) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const res = NextResponse.json({ success: true });
+  // Secure only when the browser came over HTTPS (directly or through a TLS-terminating proxy), so a
+  // plain http://<host>:3000 install can still log in.
+  const https = new URL(req.url).protocol === 'https:' || req.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';
   res.cookies.set(COOKIE, await sessionToken(expected), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_INSECURE !== '1',
+    secure: https,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 30,

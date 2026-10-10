@@ -36,15 +36,21 @@ function defaultSince(): string {
   return d.toISOString().slice(0, 10);
 }
 
+// An invalid LOCALE/CURRENCY in env would crash number formatting in the UI; fall back instead.
+function formatOk(locale: string, currency: string): boolean {
+  try { new Intl.NumberFormat(locale, { style: 'currency', currency }); return true; } catch { return false; }
+}
+
 export function envSettings(): Settings {
   const e = process.env;
+  const fmt = formatOk(e.LOCALE || 'en-US', e.CURRENCY || 'EUR');
   return {
     actualUrl: isDemo() ? '' : (e.ACTUAL_SERVER_URL || '').replace(/\/$/, ''),
     excludedAccounts: list(e.EXCLUDED_ACCOUNTS),
     savingsTag: tag(e.SAVINGS_TAG || '#savings'),
     hiddenTags: list(e.HIDDEN_TAGS ?? (isDemo() ? '#auto' : '')).map(tag),
-    locale: e.LOCALE || 'en-US',
-    currency: e.CURRENCY || 'EUR',
+    locale: fmt ? e.LOCALE || 'en-US' : 'en-US',
+    currency: fmt ? e.CURRENCY || 'EUR' : 'EUR',
     historySince: /^\d{4}-\d{2}-\d{2}$/.test(e.HISTORY_SINCE || '') ? e.HISTORY_SINCE! : defaultSince(),
     syncIntervalMin: Math.max(1, Number(e.SYNC_INTERVAL_MIN) || 15),
   };

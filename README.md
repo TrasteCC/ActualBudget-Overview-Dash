@@ -20,7 +20,8 @@ Create a `.env` file (see [`.env.example`](.env.example) for every option):
 ```env
 ACTUAL_SERVER_URL=https://actual.example.com
 ACTUAL_PASSWORD=your-actual-server-password
-ACTUAL_SYNC_ID=00000000-0000-0000-0000-000000000000   # Actual → Settings → Advanced → Sync ID
+# Actual → Settings → Advanced settings → Sync ID
+ACTUAL_SYNC_ID=00000000-0000-0000-0000-000000000000
 DASH_PASSWORD=choose-a-dashboard-password
 ```
 
@@ -43,7 +44,7 @@ Open `http://<host>:3000`.
 
 The bundled Actual API must match your actual-server's major version. Image tags follow Actual's
 `YY.M` scheme: run `ghcr.io/trastecc/actualbudget-overview-dash:26.9` against actual-server 26.9.x.
-`latest` tracks the newest Actual release.
+`latest` is the newest release; `main` follows the main branch.
 
 ## Configuration
 
@@ -63,6 +64,7 @@ headless setups can use env alone.
 | `ACTUAL_INSECURE_TLS` | `0` | `1` to accept a self-signed certificate |
 | `DASH_PASSWORD` | unset | Dashboard login. Unset = no login screen (LAN-only) |
 | `API_TOKEN` | unset | Bearer token for read-only `GET /api/summary` and `/api/overview` (see below) |
+| `ACTUAL_DATA_DIR` | `/data` in the image | Budget cache and `settings.json` (mount a volume here) |
 | `SYNC_INTERVAL_MIN` | `15` | Pull server changes every N minutes (the refresh button syncs now) |
 | `EXCLUDED_ACCOUNTS` | unset | Accounts left out of KPIs, by name or id, comma-separated. Off-budget accounts are always excluded |
 | `SAVINGS_TAG` | `#savings` | Tag in notes that marks savings; the "Excl. savings" figures leave it out |

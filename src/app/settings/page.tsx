@@ -11,6 +11,7 @@ interface State {
   defaults: EditableSettings;
   overridden: (keyof EditableSettings)[];
   accounts: { id: string; name: string; offbudget: boolean }[];
+  accountsError: string | null;
   demo: boolean;
 }
 
@@ -146,6 +147,7 @@ export default function SettingsPage() {
               );
             })}
           </div>
+          {state.accountsError && <p className="text-xs text-rose-300">Could not load the accounts from Actual: {state.accountsError}</p>}
           {hint('excludedAccounts', d.excludedAccounts.join(', '))}
         </section>
 

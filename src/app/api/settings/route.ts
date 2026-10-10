@@ -8,13 +8,16 @@ export const dynamic = 'force-dynamic';
 
 const editable = (s: Settings) => Object.fromEntries(EDITABLE.map(k => [k, s[k]]));
 
+// The settings stay editable when Actual is unreachable; only the account list needs the budget.
 async function state() {
-  const snap = await getSnapshot(getSettings());
+  let accountsError: string | null = null;
+  const snap = await getSnapshot(getSettings()).catch(err => { accountsError = err instanceof Error ? err.message : String(err); return null; });
   return {
     settings: editable(getSettings()),
     defaults: editable(envSettings()),
     overridden: overriddenKeys(),
-    accounts: snap.accounts.filter(a => !a.closed).map(a => ({ id: a.id, name: a.name, offbudget: a.offbudget })),
+    accounts: (snap?.accounts || []).filter(a => !a.closed).map(a => ({ id: a.id, name: a.name, offbudget: a.offbudget })),
+    accountsError,
     demo: isDemo(),
   };
 }
@@ -25,8 +28,9 @@ const fail = (err: unknown) => {
 };
 
 // Saving or resetting drops the cached snapshot and restarts the sync countdown, so it applies at once.
+// The demo snapshot does not depend on settings, and dropping it would also drop visitors' edits.
 function applied() {
-  invalidateSnapshot();
+  if (!isDemo()) invalidateSnapshot();
   rescheduleSync();
 }
 
@@ -36,7 +40,9 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    saveSettings(await request.json());
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Expected a JSON object' }, { status: 400 });
+    saveSettings(body);
     applied();
     return NextResponse.json(await state());
   } catch (err) { return fail(err); }

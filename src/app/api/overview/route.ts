@@ -28,13 +28,15 @@ export async function GET(request: NextRequest) {
 // Edit one transaction in Actual (category, payee, notes, amount, date).
 export async function PATCH(request: NextRequest) {
   try {
-    const { id, category, payee, notes, amount, date } = await request.json();
+    const body = await request.json().catch(() => null);
+    const { id, category, payee, notes, amount, date } = body && typeof body === 'object' ? body : {};
     if (!id || typeof id !== 'string') return NextResponse.json({ error: 'Transaction id is required' }, { status: 400 });
+    // Fields of the wrong type are ignored: a bad value must never reach the shared snapshot.
     const fields: Record<string, unknown> = {};
-    if (category) fields.category = category;
-    if (payee) fields.payee = payee;
-    if (notes !== undefined) fields.notes = notes;
-    if (typeof amount === 'number' && Number.isFinite(amount)) fields.amount = Math.round(amount * 100);
+    if (typeof category === 'string' && category) fields.category = category;
+    if (typeof payee === 'string' && payee) fields.payee = payee;
+    if (typeof notes === 'string') fields.notes = notes.slice(0, 2000);
+    if (typeof amount === 'number' && Number.isFinite(amount) && Math.abs(amount) < 1e9) fields.amount = Math.round(amount * 100);
     if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) fields.date = date;
     if (isDemo()) {
       await editDemoTransaction(id, fields);
