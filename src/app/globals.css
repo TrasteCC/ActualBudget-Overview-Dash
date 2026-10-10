@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@layer base {
+  html { color-scheme: dark; }
+  body { background: #0a0e15; }
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

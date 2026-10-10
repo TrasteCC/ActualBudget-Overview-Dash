@@ -1,0 +1,194 @@
+import { getActual, syncNow } from './actual';
+import { getSettings, Settings } from './settings';
+
+// The Overview payload: last 12 months of counted totals, per-month category spend and the decorated
+// transaction rows, built from one in-memory snapshot of the budget. All filtering happens client-side.
+
+const SNAPSHOT_TTL_MS = 2 * 60 * 1000;
+
+interface RawTx {
+  id: string;
+  date: string;
+  amount: number;
+  account: string;
+  category?: string | null;
+  payee?: string | null;
+  notes?: string | null;
+  transfer_id?: string | null;
+  starting_balance_flag?: boolean;
+  is_parent?: boolean;
+  subtransactions?: RawTx[];
+}
+
+interface Snapshot {
+  accounts: { id: string; name: string; offbudget: boolean; closed: boolean }[];
+  categories: { id: string; name: string; group_id: string; is_income?: boolean }[];
+  groups: { id: string; name: string }[];
+  payees: { id: string; name: string; transfer_acct?: string | null }[];
+  rawTrans: RawTx[];
+  updated: string;
+}
+
+export interface OverviewTransaction {
+  id: string;
+  date: string;
+  amount: number;
+  payee: string;
+  payeeId?: string;
+  category: string;
+  categoryId?: string;
+  notes: string;
+  account?: string;
+  isExcluded?: boolean;
+  counted?: boolean;
+}
+
+export interface OverviewData {
+  currentMonth: string;
+  months: { key: string; income: number; expense: number; expenseExclSavings: number; categories: Record<string, number> }[];
+  averages: { ytdIncome: number; ytdExpense: number; ltmIncome: number; ltmExpense: number };
+  categoryGroup: Record<string, string>;
+  transactions: OverviewTransaction[];
+  metadata: { updated: string; allCategories: { id: string; name: string }[]; allPayees: { id: string; name: string }[] };
+  settings: { actualUrl: string; savingsTag: string; hiddenTags: string[]; locale: string; currency: string };
+}
+
+let cache: { at: number; data: Snapshot } | null = null;
+let inflight: Promise<Snapshot> | null = null;
+
+async function loadSnapshot(settings: Settings): Promise<Snapshot> {
+  const api = await getActual();
+  const [accounts, categories, groups, payees] = await Promise.all([
+    api.getAccounts(), api.getCategories(), api.getCategoryGroups(), api.getPayees(),
+  ]);
+  const until = `${new Date().getFullYear() + 1}-12-31`;
+  const rawTrans: RawTx[] = [];
+  for (const acc of accounts.filter(a => !a.closed)) {
+    const txs = (await api.getTransactions(acc.id, settings.historySince, until)) as unknown as RawTx[];
+    for (const t of txs) {
+      // Split parents carry no category; their children hold the real ones.
+      if (t.is_parent && t.subtransactions?.length) {
+        for (const s of t.subtransactions) {
+          rawTrans.push({ ...s, account: acc.id, date: s.date || t.date, payee: s.payee || t.payee, notes: s.notes || t.notes });
+        }
+      } else {
+        rawTrans.push({ ...t, account: acc.id });
+      }
+    }
+  }
+  return {
+    accounts: accounts as Snapshot['accounts'],
+    categories: categories as Snapshot['categories'],
+    groups: groups as Snapshot['groups'],
+    payees: payees as Snapshot['payees'],
+    rawTrans,
+    updated: new Date().toISOString(),
+  };
+}
+
+export function invalidateSnapshot() { cache = null; }
+
+async function getSnapshot(settings: Settings, refresh: boolean): Promise<Snapshot> {
+  if (refresh) { await syncNow(); cache = null; }
+  if (cache && Date.now() - cache.at < SNAPSHOT_TTL_MS) return cache.data;
+  if (!inflight) {
+    inflight = loadSnapshot(settings)
+      .then(data => { cache = { at: Date.now(), data }; return data; })
+      .finally(() => { inflight = null; });
+  }
+  return inflight;
+}
+
+const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+export async function buildOverview(refresh = false): Promise<OverviewData> {
+  const settings = getSettings();
+  const snap = await getSnapshot(settings, refresh);
+
+  const accountName = new Map(snap.accounts.map(a => [a.id, a.name]));
+  const categoryName = new Map(snap.categories.map(c => [c.id, c.name]));
+  const payeeName = new Map(snap.payees.map(p => [p.id, p.name]));
+  const groupName = new Map(snap.groups.map(g => [g.id, g.name]));
+
+  // Excluded from KPIs: off-budget accounts, EXCLUDED_ACCOUNTS (name or id), transfers, starting balances.
+  const excludedAccountIds = new Set(
+    snap.accounts
+      .filter(a => a.offbudget || settings.excludedAccounts.includes(a.id) || settings.excludedAccounts.includes(a.name.toLowerCase()))
+      .map(a => a.id),
+  );
+  const transferPayees = new Set(snap.payees.filter(p => p.transfer_acct).map(p => p.id));
+  const isExcludedAccount = (t: RawTx) => excludedAccountIds.has(t.account);
+  const isTransfer = (t: RawTx) => !!t.transfer_id || (!!t.payee && transferPayees.has(t.payee));
+  const counted = (t: RawTx) => !isExcludedAccount(t) && !isTransfer(t) && !t.starting_balance_flag;
+
+  const map = (t: RawTx): OverviewTransaction => ({
+    id: t.id,
+    date: t.date,
+    amount: t.amount / 100,
+    payee: (t.payee && payeeName.get(t.payee)) || 'Unknown payee',
+    payeeId: t.payee || undefined,
+    category: (t.category && categoryName.get(t.category)) || 'Uncategorized',
+    categoryId: t.category || undefined,
+    notes: t.notes || '',
+    account: accountName.get(t.account) || t.account,
+    isExcluded: isExcludedAccount(t) || isTransfer(t),
+    counted: counted(t),
+  });
+
+  const now = new Date();
+  const monthKeys = Array.from({ length: 12 }, (_, i) => monthKey(new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)));
+  const currentMonth = monthKeys[11];
+  const windowTrans = snap.rawTrans.filter(t => t.date >= `${monthKeys[0]}-01`);
+  const kpiTrans = windowTrans.filter(counted).map(map);
+  const savings = settings.savingsTag;
+
+  const months = monthKeys.map(k => {
+    const cats: Record<string, number> = {};
+    let inc = 0, exp = 0, excl = 0;
+    for (const t of kpiTrans) {
+      if (!t.date.startsWith(k)) continue;
+      if (t.amount > 0) { inc += t.amount; continue; }
+      exp -= t.amount;
+      if (!t.notes.toLowerCase().includes(savings)) excl -= t.amount;
+      cats[t.category] = (cats[t.category] || 0) - t.amount;
+    }
+    return { key: k, income: inc, expense: exp, expenseExclSavings: excl, categories: cats };
+  });
+
+  const year = now.getFullYear();
+  const fullMonthsYTD = Math.max(now.getMonth(), 1);
+  const ytdFull = kpiTrans.filter(t => t.date.startsWith(`${year}`) && t.date < `${currentMonth}-01`);
+  const sum = (ts: OverviewTransaction[], sign: number) => ts.filter(t => sign * t.amount > 0).reduce((a, t) => a + t.amount, 0);
+  const averages = {
+    ytdIncome: sum(ytdFull, 1) / fullMonthsYTD,
+    ytdExpense: Math.abs(sum(ytdFull, -1)) / fullMonthsYTD,
+    ltmIncome: sum(kpiTrans, 1) / 12,
+    ltmExpense: Math.abs(sum(kpiTrans, -1)) / 12,
+  };
+
+  const categoryGroup: Record<string, string> = {};
+  for (const c of snap.categories) categoryGroup[c.name] = groupName.get(c.group_id) || 'Other';
+
+  // The list keeps excluded-account rows and transfers (greyed out); only starting balances are dropped.
+  const transactions = windowTrans.filter(t => !t.starting_balance_flag).map(map).sort((a, b) => b.date.localeCompare(a.date));
+
+  return {
+    currentMonth,
+    months,
+    averages,
+    categoryGroup,
+    transactions,
+    metadata: {
+      updated: snap.updated,
+      allCategories: snap.categories.map(c => ({ id: c.id, name: c.name })),
+      allPayees: snap.payees.filter(p => !p.transfer_acct).map(p => ({ id: p.id, name: p.name })),
+    },
+    settings: {
+      actualUrl: settings.actualUrl,
+      savingsTag: settings.savingsTag,
+      hiddenTags: settings.hiddenTags,
+      locale: settings.locale,
+      currency: settings.currency,
+    },
+  };
+}
