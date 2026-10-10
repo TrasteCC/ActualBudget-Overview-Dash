@@ -9,6 +9,8 @@ directly: no extra API service, no database.
 
 > Not affiliated with the Actual Budget project.
 
+**Try the demo:** <https://actual-dash.marcecastro.com> (made-up data; edits reset every 30 minutes).
+
 ![Overview: KPIs, monthly summary, spending by category, tags and transactions](docs/screenshot-overview.png)
 
 ## Install
