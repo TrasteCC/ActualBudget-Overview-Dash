@@ -92,7 +92,6 @@ export default function SettingsPage() {
     );
   }
 
-  const ro = state.demo;
   const set = (patch: Partial<Form>) => { setForm({ ...form, ...patch }); setSaved(false); };
   const hint = (k: keyof EditableSettings, shown: string) =>
     state.overridden.includes(k) ? <span className="text-[11px] text-amber-300/80">Overrides env default: {shown || '(none)'}</span> : <span className="text-[11px] text-[#66738a]">Default from env</span>;
@@ -118,9 +117,9 @@ export default function SettingsPage() {
           <h1 className="text-lg font-semibold">Settings</h1>
         </div>
 
-        {ro && (
+        {state.demo && (
           <p className="rounded-lg border border-amber-400/30 bg-amber-400/[0.07] px-3 py-2 text-xs text-amber-200">
-            Settings are read-only in the demo. On your own install they are saved to <code>/data/settings.json</code>.
+            Demo: changes are shared with other visitors and reset every 30 minutes. On your own install they are saved to <code>/data/settings.json</code>.
           </p>
         )}
 
@@ -133,11 +132,11 @@ export default function SettingsPage() {
             {state.accounts.map(a => {
               const checked = a.offbudget || form.excluded.includes(a.id);
               return (
-                <label key={a.id} className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] ${a.offbudget || ro ? 'opacity-70' : 'hover:bg-white/[0.04] cursor-pointer'}`}>
+                <label key={a.id} className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] ${a.offbudget ? 'opacity-70' : 'hover:bg-white/[0.04] cursor-pointer'}`}>
                   <input
                     type="checkbox"
                     checked={checked}
-                    disabled={a.offbudget || ro}
+                    disabled={a.offbudget}
                     onChange={e => set({ excluded: e.target.checked ? [...form.excluded, a.id] : form.excluded.filter(id => id !== a.id) })}
                     className="w-4 h-4 accent-blue-500"
                   />
@@ -153,13 +152,13 @@ export default function SettingsPage() {
         <section className={`${panel} p-4 grid sm:grid-cols-2 gap-4`}>
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] font-semibold">Savings tag</span>
-            <input className={input} value={form.savingsTag} disabled={ro} onChange={e => set({ savingsTag: e.target.value })} placeholder="#savings" />
+            <input className={input} value={form.savingsTag} onChange={e => set({ savingsTag: e.target.value })} placeholder="#savings" />
             <span className="text-xs text-[#8a96a8]">Expenses with this tag in the notes are left out of “Excl. savings”.</span>
             {hint('savingsTag', d.savingsTag)}
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] font-semibold">Hidden tags</span>
-            <input className={input} value={form.hiddenTags} disabled={ro} onChange={e => set({ hiddenTags: e.target.value })} placeholder="#auto, #imported" />
+            <input className={input} value={form.hiddenTags} onChange={e => set({ hiddenTags: e.target.value })} placeholder="#auto, #imported" />
             <span className="text-xs text-[#8a96a8]">Comma-separated. Kept out of the tag strip (automation markers).</span>
             {hint('hiddenTags', d.hiddenTags.join(', '))}
           </label>
@@ -168,12 +167,12 @@ export default function SettingsPage() {
         <section className={`${panel} p-4 grid sm:grid-cols-2 gap-4`}>
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] font-semibold">Locale</span>
-            <input className={input} value={form.locale} disabled={ro} onChange={e => set({ locale: e.target.value })} placeholder="en-US" />
+            <input className={input} value={form.locale} onChange={e => set({ locale: e.target.value })} placeholder="en-US" />
             {hint('locale', d.locale)}
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] font-semibold">Currency</span>
-            <input className={input} value={form.currency} disabled={ro} onChange={e => set({ currency: e.target.value })} placeholder="EUR" maxLength={3} />
+            <input className={input} value={form.currency} onChange={e => set({ currency: e.target.value })} placeholder="EUR" maxLength={3} />
             {hint('currency', d.currency)}
           </label>
           <p className="sm:col-span-2 text-xs text-[#8a96a8]">
@@ -184,13 +183,13 @@ export default function SettingsPage() {
         <section className={`${panel} p-4 grid sm:grid-cols-2 gap-4`}>
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] font-semibold">Load history from</span>
-            <input type="date" className={input} value={form.historySince} disabled={ro} onChange={e => set({ historySince: e.target.value })} />
+            <input type="date" className={input} value={form.historySince} onChange={e => set({ historySince: e.target.value })} />
             <span className="text-xs text-[#8a96a8]">Earliest date read from the budget.</span>
             {hint('historySince', d.historySince)}
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] font-semibold">Sync every (minutes)</span>
-            <input type="number" min={1} max={1440} className={input} value={form.syncIntervalMin} disabled={ro} onChange={e => set({ syncIntervalMin: e.target.value })} />
+            <input type="number" min={1} max={1440} className={input} value={form.syncIntervalMin} onChange={e => set({ syncIntervalMin: e.target.value })} />
             <span className="text-xs text-[#8a96a8]">The refresh button always syncs immediately.</span>
             {hint('syncIntervalMin', String(d.syncIntervalMin))}
           </label>
@@ -200,7 +199,7 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={save}
-            disabled={busy || ro}
+            disabled={busy}
             className={`flex items-center gap-2 h-9 px-4 rounded-[9px] bg-blue-500/20 border border-blue-500/40 text-xs font-semibold text-blue-100 hover:bg-blue-500/30 disabled:opacity-50 transition-colors ${focus}`}
           >
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
@@ -208,7 +207,7 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={() => call('DELETE')}
-            disabled={busy || ro || state.overridden.length === 0}
+            disabled={busy || state.overridden.length === 0}
             className={`flex items-center gap-2 h-9 px-4 rounded-[9px] bg-[#111823] border border-[#1e2835] text-xs font-semibold text-[#c9d2de] hover:bg-white/[0.04] disabled:opacity-50 transition-colors ${focus}`}
           >
             <RotateCcw className="w-3.5 h-3.5" /> Reset to defaults

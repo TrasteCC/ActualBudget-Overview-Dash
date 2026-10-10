@@ -1,7 +1,9 @@
 import type { RawTx, Snapshot } from './overview';
 
-// DEMO=1: a made-up budget for screenshots and the public demo. Nothing here is real data.
-// 14 months ending today. Each month has its own fixed seed, so a past month always looks the same.
+// DEMO=1: a made-up budget for screenshots and the public demo. Nothing here is real: the shape
+// (categories, how often, how much, when) follows a typical household spending about 2,000 EUR a
+// month, and every payee is invented. 14 months ending today; each month has its own fixed seed, so
+// a past month always looks the same.
 
 function rng(seed: number) { // mulberry32
   return () => {
@@ -12,169 +14,219 @@ function rng(seed: number) { // mulberry32
   };
 }
 
-const GROUPS: [string, string][] = [
-  ['housing', 'Housing'], ['food', 'Food & drink'], ['transport', 'Transport'], ['lifestyle', 'Lifestyle'],
-  ['health', 'Health & care'], ['travel', 'Travel & gifts'], ['savings', 'Savings'], ['income', 'Income'],
-];
-
-const CATEGORIES: [string, string, string][] = [
-  ['rent', 'Rent', 'housing'], ['utilities', 'Utilities', 'housing'], ['internet', 'Internet & phone', 'housing'],
-  ['home', 'Home & furniture', 'housing'], ['insurance', 'Insurance', 'housing'],
-  ['groceries', 'Groceries', 'food'], ['restaurants', 'Restaurants', 'food'], ['coffee', 'Coffee & snacks', 'food'],
-  ['fuel', 'Fuel', 'transport'], ['transit', 'Public transport', 'transport'], ['car', 'Car maintenance', 'transport'],
-  ['parking', 'Parking & tolls', 'transport'],
-  ['subscriptions', 'Subscriptions', 'lifestyle'], ['shopping', 'Shopping', 'lifestyle'],
-  ['entertainment', 'Entertainment', 'lifestyle'], ['sports', 'Sports', 'lifestyle'],
-  ['health', 'Health', 'health'], ['pharmacy', 'Pharmacy', 'health'], ['personal', 'Personal care', 'health'],
-  ['travel', 'Travel', 'travel'], ['gifts', 'Gifts', 'travel'],
-  ['investments', 'Investments', 'savings'], ['fees', 'Bank fees', 'savings'],
-  ['salary', 'Salary', 'income'], ['freelance', 'Freelance', 'income'], ['other-income', 'Other income', 'income'],
-];
-
-const PAYEES = [
-  'Acme Corp', 'Freelance client', 'Landlord', 'City Power & Light', 'AquaCity Water', 'FiberNet', 'MobileOne',
-  'SafeHome Insurance', 'AutoShield Insurance', 'FreshMart', 'GreenGrocer', 'Market Square', 'Corner Bakery',
-  'Daily Grind Café', 'Café Luna', 'Bistro 21', 'Pizza Nova', 'Sushi Zen', 'Taco Loco', 'The Green Fork',
-  'QuickFuel', 'Metro Transit', 'CityPark', 'AutoCare Garage', 'StreamFlix', 'TuneBox', 'CloudDrive',
-  'Daily Ledger', 'FitClub', 'MegaMart', 'Style & Co', 'Gadget Store', 'BookNook', 'Cinema Royale',
-  'Concert Hall', 'Pharmacy Plus', 'Dr. Rivera Clinic', 'Smile Dental', 'Barber & Co', 'HomeFix', 'Nordic Home',
-  'SkyWay Airlines', 'Hotel Aurora', 'RentaRide', 'City Museum', 'Index Fund Co', 'Bank',
+const GROUPS: [string, string[]][] = [
+  ['Shopping', ['Groceries', 'Home', 'Gifts', 'Electronics', 'Kids & pets', 'Clothing', 'Books & apps', 'Sports gear', 'Other shopping']],
+  ['Leisure & transport', ['Restaurants', 'Hotels', 'Fuel', 'Travel', 'Car rental', 'Transport', 'Hobbies', 'Charity', 'Other leisure', 'Lottery', 'Parking & tolls']],
+  ['Housing & vehicle', ['Rent & parking', 'Community fees', 'Cleaning service', 'Car maintenance', 'Home maintenance']],
+  ['Utilities', ['Online services', 'Electricity', 'Internet', 'Water', 'Waste collection', 'TV']],
+  ['Health, learning & sport', ['Health', 'Pharmacy', 'Courses', 'Sports', 'Personal care']],
+  ['Other', ['Family', 'Cash', 'Other expenses']],
+  ['Insurance', ['Car insurance', 'Life insurance']],
+  ['Banks & taxes', ['Taxes', 'Bank fees']],
+  ['Income', ['Salary', 'Interest & cashback', 'Tax refund', 'Other income', 'Second-hand sales']],
 ];
 
 const ACCOUNTS = [
-  { id: 'acc-checking', name: 'Checking', offbudget: false, closed: false },
-  { id: 'acc-card', name: 'Credit card', offbudget: false, closed: false },
+  { id: 'acc-salary', name: 'Salary account', offbudget: false, closed: false },
+  { id: 'acc-everyday', name: 'Everyday account', offbudget: false, closed: false },
   { id: 'acc-savings', name: 'Savings', offbudget: true, closed: false },
 ];
 
-const pid = (name: string) => `p-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+// Variable spending: [category, count per month ([min, max]; below 1 = probability of one), amount range, payees]
+const SPEND: [string, [number, number] | number, [number, number], string[]][] = [
+  ['Groceries', [10, 14], [2, 58], ['FreshMart', 'Valley Grocer', 'Daily Market', 'Corner Bakery', 'Green Basket']],
+  ['Restaurants', [13, 18], [1.5, 34], ['Bistro 21', 'Pizza Nova', 'Taco Loco', 'The Green Fork', 'Café Luna', 'Sweet Crumbs Bakery', 'Sushi Zen']],
+  ['Home', [6, 9], [3, 55], ['ShopNow', 'Bazaar Direct', 'HomeBox', 'PayLater']],
+  ['Fuel', [2, 3], [24, 42], ['QuickFuel']],
+  ['Electronics', 0.35, [5, 40], ['Gadget Store', 'PC Parts Direct']],
+  ['Clothing', [1, 2], [8, 70], ['Style & Co', 'Urban Threads']],
+  ['Online services', [9, 12], [2, 45], ['CloudDrive', 'WebHost Pro', 'AI Assistant Pro', 'CodeHub', 'VoiceAPI', 'ChatBot Plus', 'Domain Nest']],
+  ['Health', 0.55, [30, 62], ['City Health Clinic']],
+  ['Pharmacy', [0, 2], [4, 45], ['Pharmacy Plus']],
+  ['Kids & pets', 0.5, [6, 20], ['Pet Corner']],
+  ['Kids & pets', 0.25, [30, 60], ['Happy Paws Vet']],
+  ['Car rental', 0.1, [33, 90], ['RentaRide']],
+  ['Transport', 0.6, [3, 25], ['City Taxi', 'RideNow']],
+  ['Travel', 0.1, [10, 60], ['RailOne']],
+  ['Hotels', 0.35, [80, 160], ['StayAway Rentals']],
+  ['Other expenses', 0.6, [2, 40], ['Parcel Express']],
+  ['Sports', 0.4, [8, 80], ['Trail Runners Club', 'Race Tickets']],
+  ['Other shopping', 0.5, [3, 45], ['Bargain Bin']],
+  ['Taxes', 0.45, [5, 33], ['City Council']],
+  ['Books & apps', [1, 2], [2, 16], ['BookNook', 'AppMarket']],
+  ['Car maintenance', 0.3, [12, 45], ['AutoCare Garage']],
+  ['Personal care', 0.8, [6, 16], ['Barber & Co']],
+  ['Other leisure', 0.5, [1, 27], ['Spa & Relax', 'Cinema Royale']],
+  ['Lottery', 0.4, [3, 11], ['Lucky Draw']],
+  ['Parking & tolls', [1, 3], [0.3, 5], ['CityPark', 'Toll Road']],
+  ['Sports gear', 0.2, [4, 13], ['Sport Outlet']],
+  ['Home maintenance', 0.1, [12, 25], ['HomeFix']],
+  ['Bank fees', 0.3, [0.5, 4], ['Bank']],
+];
+
+// Big one-offs paid from savings, by calendar month: [day, category, payee, amount, note]
+const FROM_SAVINGS: Record<number, [number, string, string, number, string][]> = {
+  1: [[14, 'Electronics', 'Gadget Store', 310, 'New laptop'], [22, 'Home', 'HomeBox', 140, 'Desk chair']],
+  2: [[9, 'Home', 'Nordic Home', 220, 'Sofa'], [20, 'Gifts', 'GiftHub', 164, 'Wedding gift']],
+  3: [[3, 'Community fees', 'Building community', 500, 'Roof repair levy'], [6, 'Electronics', 'PC Parts Direct', 150, 'Monitor'],
+    [10, 'Home', 'HomeBox', 120, 'Bookshelf'], [15, 'Courses', 'Market School', 164, 'Weekend workshop'],
+    [18, 'Electronics', 'Gadget Store', 95, 'Headphones'], [27, 'Online services', 'CloudDrive', 39, 'Yearly storage plan']],
+  6: [[5, 'Hobbies', 'Music Store', 177, 'Digital piano'], [14, 'Electronics', 'Gadget Store', 180, 'Camera']],
+  8: [[18, 'Electronics', 'Gadget Store', 45, 'Power bank']],
+  9: [[7, 'Home', 'Nordic Home', 150, 'Bed frame'], [21, 'Electronics', 'PC Parts Direct', 80, 'Keyboard and mouse']],
+};
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const cid = (name: string) => `c-${slug(name)}`;
+const pid = (name: string) => `p-${slug(name)}`;
 const xfer = (acc: string) => `p-transfer-${acc}`;
 
 export function demoSnapshot(): Snapshot {
   const now = new Date();
   const rawTrans: RawTx[] = [];
+  const payeeNames = new Set<string>();
 
   for (let back = 13; back >= 0; back--) {
     const first = new Date(now.getFullYear(), now.getMonth() - back, 1);
     const y = first.getFullYear();
-    const mo = first.getMonth(); // 0-based
-    const key = `${y}-${String(mo + 1).padStart(2, '0')}`;
-    const daysIn = new Date(y, mo + 1, 0).getDate();
+    const cal = first.getMonth() + 1;
+    const key = `${y}-${String(cal).padStart(2, '0')}`;
+    const daysIn = new Date(y, cal, 0).getDate();
     const lastDay = back === 0 ? now.getDate() : daysIn;
-    const r = rng(y * 12 + mo);
+    const r = rng(y * 12 + cal);
     const between = (lo: number, hi: number) => lo + r() * (hi - lo);
+    const logu = (lo: number, hi: number) => lo * (hi / lo) ** r(); // most amounts small, a few large
     const int = (lo: number, hi: number) => Math.floor(between(lo, hi + 1));
+    const pick = <T,>(a: T[]) => a[int(0, a.length - 1)];
     const day = () => int(1, daysIn);
+    const acc = () => (r() < 0.64 ? 'acc-everyday' : 'acc-salary');
     let n = 0;
     const month: RawTx[] = [];
 
     const add = (d: number, account: string, eur: number, payee: string, category: string | null, notes = '', extra: Partial<RawTx> = {}) => {
+      if (payee) payeeNames.add(payee);
       const t: RawTx = {
-        id: `tx-${key}-${++n}`, date: `${key}-${String(d).padStart(2, '0')}`, amount: Math.round(eur * 100),
-        account, payee: pid(payee), category, notes, ...extra,
+        id: `tx-${key}-${++n}`, date: `${key}-${String(Math.min(d, daysIn)).padStart(2, '0')}`, amount: Math.round(eur * 100),
+        account, payee: payee ? pid(payee) : null, category: category ? cid(category) : null, notes, ...extra,
       };
       month.push(t);
       return t;
     };
-    const transfer = (d: number, from: string, to: string, eur: number, notes = '') => {
+    const transfer = (d: number, from: string, to: string, eur: number, notes: string) => {
       const a = add(d, from, -eur, '', null, notes, { payee: xfer(to) });
       const b = add(d, to, eur, '', null, notes, { payee: xfer(from) });
       a.transfer_id = b.id;
       b.transfer_id = a.id;
     };
-    const many = (count: number, account: () => string, lo: number, hi: number, payees: string[], category: string, notes: () => string = () => '') => {
-      for (let i = 0; i < count; i++) add(day(), account(), -between(lo, hi), payees[int(0, payees.length - 1)], category, notes());
+    const spend = (count: [number, number] | number, category: string, [lo, hi]: [number, number], payees: string[], note = '', when: () => number = day) => {
+      const times = Array.isArray(count) ? int(count[0], count[1]) : count >= 1 ? count : r() < count ? 1 : 0;
+      for (let i = 0; i < times; i++) {
+        const auto = r() < 0.22 ? '#auto' : '';
+        add(when(), acc(), -logu(lo, hi), pick(payees), category, [note, auto].filter(Boolean).join(' '));
+      }
     };
-    const either = () => (r() < 0.6 ? 'acc-card' : 'acc-checking');
-    const card = () => 'acc-card';
-    const checking = () => 'acc-checking';
-    const auto = (text: string) => () => (r() < 0.35 ? `${text} #auto` : r() < 0.5 ? text : '');
 
     if (back === 13) {
-      add(1, 'acc-checking', 2400, 'Bank', null, 'Starting balance', { starting_balance_flag: true });
-      add(1, 'acc-savings', 8000, 'Bank', null, 'Starting balance', { starting_balance_flag: true });
+      add(1, 'acc-salary', 1800, '', null, 'Starting balance', { starting_balance_flag: true });
+      add(1, 'acc-everyday', 350, '', null, 'Starting balance', { starting_balance_flag: true });
+      add(1, 'acc-savings', 6500, '', null, 'Starting balance', { starting_balance_flag: true });
     }
 
-    // Income
-    add(1, 'acc-checking', 4300, 'Acme Corp', 'salary', 'Monthly salary');
-    if (mo === 11) add(20, 'acc-checking', 2000, 'Acme Corp', 'salary', 'Year-end bonus');
-    if (r() < 0.35) add(int(10, 25), 'acc-checking', between(250, 900), 'Freelance client', 'freelance', 'Website project');
-    if (r() < 0.3) add(day(), 'acc-card', between(15, 60), 'MegaMart', 'other-income', 'Refund');
-    add(daysIn, 'acc-savings', between(3.5, 5.5), 'Bank', null, 'Interest');
+    // Income: salary near the end of the month (a raise eight months ago), two extra pays, a yearly bonus.
+    add(int(25, 29), 'acc-salary', (back > 8 ? 1590 : 1940) + between(-20, 20), 'Acme Corp', 'Salary', 'Monthly salary');
+    if (cal === 6 || cal === 12) add(15, 'acc-salary', 680, 'Acme Corp', 'Salary', 'Extra pay');
+    if (cal === 2) add(25, 'acc-salary', 5960, 'Acme Corp', 'Salary', 'Annual bonus');
+    for (let i = int(1, 3); i > 0; i--) add(day(), 'acc-salary', between(0.2, 3), 'Bank', 'Interest & cashback', 'Interest');
+    if (cal === 3 || cal === 9) add(2, 'acc-salary', 220, 'Bank', 'Interest & cashback', 'Cashback promotion');
+    if (cal === 5) add(2, 'acc-salary', 553, 'Tax Agency', 'Tax refund', 'Income tax refund');
+    if (r() < 0.15) add(day(), 'acc-everyday', between(50, 150), 'Peer transfer', 'Other income', 'Refund from a friend');
+    if (cal === 7) add(28, 'acc-everyday', 11, 'Resale App', 'Second-hand sales', 'Old lamp');
 
-    // Fixed costs
-    add(1, 'acc-checking', -1150, 'Landlord', 'rent', 'Rent');
-    add(2, 'acc-checking', -300, 'Index Fund Co', 'investments', 'Monthly contribution #savings');
-    add(2, 'acc-checking', -39, 'FitClub', 'sports', 'Gym membership');
-    add(3, 'acc-checking', -32.5, 'SafeHome Insurance', 'insurance', 'Home insurance');
-    add(5, 'acc-checking', -between(mo <= 1 || mo >= 10 ? 95 : 55, mo <= 1 || mo >= 10 ? 145 : 90), 'City Power & Light', 'utilities', 'Electricity #auto');
-    if (mo % 2 === 0) add(7, 'acc-checking', -between(30, 42), 'AquaCity Water', 'utilities', 'Water');
-    add(8, 'acc-checking', -45, 'FiberNet', 'internet', 'Fibre 600 Mb');
-    add(12, 'acc-checking', -18, 'MobileOne', 'internet', 'Phone plan');
-    add(9, 'acc-card', -13.99, 'StreamFlix', 'subscriptions', '#auto');
-    add(14, 'acc-card', -10.99, 'TuneBox', 'subscriptions', '');
-    add(20, 'acc-card', -2.99, 'CloudDrive', 'subscriptions', '');
-    add(22, 'acc-card', -7.99, 'Daily Ledger', 'subscriptions', 'News');
-    add(1, 'acc-checking', -40, 'Metro Transit', 'transit', 'Monthly pass');
-    add(daysIn, 'acc-checking', -2, 'Bank', 'fees', 'Account fee');
-    if (mo === 2) add(15, 'acc-checking', -410, 'AutoShield Insurance', 'insurance', 'Car insurance (yearly)');
+    // Fixed bills
+    add(1, 'acc-salary', -27, 'Parking Space Co', 'Rent & parking', 'Garage space');
+    if (cal % 3 !== 0) add(1, 'acc-salary', -137, 'Sunny Flats', 'Rent & parking', 'Room rent');
+    add(1, 'acc-salary', -21, 'FiberNet', 'Internet', 'Fibre');
+    if (r() < 0.8) add(1, 'acc-salary', -25, 'CleanHome Services', 'Cleaning service', 'Cleaning');
+    add(2, 'acc-salary', -16, 'Building community', 'Community fees', 'Monthly fee');
+    add(2, 'acc-salary', -25.5, 'AutoShield Insurance', 'Car insurance', 'Monthly instalment');
+    add(3, 'acc-salary', -6, 'Kind Hearts Fund', 'Charity', 'Monthly donation');
+    add(5, 'acc-salary', -between(60, 80), 'Family', 'Family', 'Family support');
+    add(13, 'acc-everyday', -8, 'Learning Club', 'Courses', 'Membership');
+    add(17, 'acc-everyday', -5, 'ChartLab', 'Courses', 'Subscription');
+    if (cal <= 8) add(17, 'acc-salary', -137, 'Market School', 'Courses', 'Course instalment');
+    add(23, 'acc-everyday', -24, 'PetFood Box', 'Kids & pets', 'Dog food subscription');
+    add(27, 'acc-salary', -between(21, 35), 'Bright Power', 'Electricity', 'Electricity #auto');
+    if (cal % 2 === 0) {
+      add(4, 'acc-salary', -12, 'AquaCity Water', 'Water', 'Water');
+      add(4, 'acc-salary', -9, 'AquaCity Water', 'Waste collection', 'Waste collection');
+    }
+    if (cal === 4) add(9, 'acc-salary', -22, 'Vehicle Inspection', 'Car maintenance', 'Yearly inspection');
+    if (cal === 5) add(5, 'acc-everyday', -49, 'StreamBox TV', 'TV', 'Yearly plan');
+    if (cal === 11) add(20, 'acc-salary', -34, 'SafeLife Insurance', 'Life insurance', 'Yearly premium');
+    add(daysIn, 'acc-savings', between(3, 6), 'Bank', null, 'Interest');
 
     // Everyday spending
-    many(int(9, 13), either, 18, 95, ['FreshMart', 'GreenGrocer', 'Market Square', 'Corner Bakery'], 'groceries', auto('Groceries'));
-    many(int(10, 18), either, 2.4, 8.5, ['Daily Grind Café', 'Café Luna', 'Corner Bakery'], 'coffee', auto('Coffee'));
-    many(int(4, 8), card, 16, 72, ['Bistro 21', 'Pizza Nova', 'Sushi Zen', 'Taco Loco', 'The Green Fork'], 'restaurants');
-    many(int(2, 4), card, 45, 75, ['QuickFuel'], 'fuel');
-    many(int(4, 9), checking, 1.5, 12, ['Metro Transit'], 'transit');
-    many(int(2, 4), card, 2, 12, ['CityPark'], 'parking');
-    many(int(2, 5), card, 12, 140, ['Style & Co', 'Gadget Store', 'BookNook', 'MegaMart'], 'shopping');
-    many(int(1, 3), card, 9, 45, ['Cinema Royale', 'Concert Hall', 'BookNook'], 'entertainment');
-    many(int(0, 2), card, 4, 30, ['Pharmacy Plus'], 'pharmacy');
-    many(1, card, 18, 35, ['Barber & Co'], 'personal');
-    many(r() < 0.3 ? 1 : 0, checking, 45, 120, ['Dr. Rivera Clinic', 'Smile Dental'], 'health');
-    many(int(0, 2), card, 15, 180, ['HomeFix', 'Nordic Home'], 'home');
-    if (mo % 4 === 1) add(day(), 'acc-checking', -between(120, 380), 'AutoCare Garage', 'car', 'Service');
-    many(mo === 11 ? int(3, 5) : int(0, 1), card, 20, 90, ['MegaMart', 'BookNook', 'Style & Co'], 'gifts', () => (mo === 11 ? 'Christmas presents #gift' : 'Birthday present #gift'));
+    for (const [category, count, range, payees] of SPEND) spend(count, category, range, payees);
+    spend(cal === 12 ? [6, 9] : [2, 4], 'Gifts', [3, 55], ['GiftHub', 'ShopNow', 'Toy Planet']);
+    for (let i = int(1, 2); i > 0; i--) add(day(), 'acc-everyday', -10 * int(1, 2), 'ATM', 'Cash', 'Cash withdrawal');
 
-    // Holidays: a summer trip in August (flights booked in June) and a spring weekend away in April.
-    if (mo === 5) add(15, 'acc-card', -428, 'SkyWay Airlines', 'travel', 'Flights for the summer trip #holiday');
-    if (mo === 7) {
-      add(4, 'acc-card', -960, 'Hotel Aurora', 'travel', 'Hotel, 6 nights #holiday');
-      add(4, 'acc-card', -214, 'RentaRide', 'travel', 'Car rental #holiday');
-      add(6, 'acc-card', -36, 'City Museum', 'entertainment', 'Museum tickets #holiday');
-      many(int(5, 8), card, 25, 85, ['Bistro 21', 'The Green Fork', 'Sushi Zen'], 'restaurants', () => 'Dinner out #holiday');
-    }
-    if (mo === 3) {
-      add(11, 'acc-card', -186, 'Hotel Aurora', 'travel', 'Weekend away #holiday');
-      add(12, 'acc-card', -64, 'The Green Fork', 'restaurants', 'Dinner #holiday');
+    // A work week away most months (not in August): hotel, fuel, canteen, groceries, taxi.
+    if (cal !== 8) {
+      const start = int(3, 20);
+      const wk = () => start + int(0, 4);
+      spend([1, 2], 'Hotels', [38, 62], ['NightOwl Hotels', 'Harbor Inn'], '#work-week', wk);
+      spend([1, 2], 'Fuel', [18, 32], ['Highway Fuel'], '#work-week', wk);
+      spend([4, 8], 'Restaurants', [3, 9], ['Office Canteen'], '#work-week', wk);
+      spend([1, 2], 'Groceries', [4, 12], ['Daily Market'], '#work-week', wk);
+      spend(0.5, 'Transport', [6, 16], ['RideNow'], '#work-week', wk);
     }
 
-    // Two split transactions: each parent's children carry the categories (as the live loader expands them).
+    // Holidays: a mountain road trip in August, a city break in December (flights booked in October).
+    if (cal === 8) {
+      const d = () => int(3, 12);
+      const tag = '#trip-dolomites';
+      spend(4, 'Hotels', [55, 95], ['Alpine Lodge', 'Mountain Inn'], tag, d);
+      spend(12, 'Restaurants', [6, 40], ['Trattoria Alpina', 'Rifugio Café', 'Pizzeria Monte'], tag, d);
+      add(3, 'acc-everyday', -187, 'RentaRide', 'Car rental', `Car for the trip ${tag}`);
+      spend(2, 'Cash', [30, 30], ['ATM'], tag, d);
+      spend(3, 'Transport', [8, 35], ['Cable Car Co'], tag, d);
+      spend(2, 'Gifts', [12, 40], ['Souvenir Shop'], tag, d);
+      spend(2, 'Fuel', [22, 32], ['Highway Fuel'], tag, d);
+      spend(2, 'Other leisure', [10, 25], ['Museum Ticket Office'], tag, d);
+    }
+    if (cal === 10) add(21, 'acc-everyday', -160, 'SkyWay Airlines', 'Travel', 'Flights #trip-vienna');
+    if (cal === 11) spend(2, 'Travel', [20, 60], ['CityTours'], '#trip-vienna');
+    if (cal === 12) {
+      const d = () => int(4, 9);
+      spend(2, 'Travel', [80, 100], ['Riverside Hotel'], '#trip-vienna', d);
+      spend(28, 'Travel', [3, 45], ['Old Town Café', 'City Museum', 'Market Hall', 'Tram Tickets', 'Schnitzel Corner'], '#trip-vienna', d);
+    }
+
+    for (const [d, category, payee, eur, note] of FROM_SAVINGS[cal] || []) add(d, 'acc-salary', -eur, payee, category, `${note} #savings`);
+
+    // Two split purchases: each parent's children carry the categories (as the live loader expands them).
     if (back === 2) {
-      const d = 18;
-      add(d, 'acc-card', -52.9, 'MegaMart', 'shopping', 'Headphones', { id: `tx-${key}-split1/a` });
-      add(d, 'acc-card', -33.5, 'MegaMart', 'gifts', 'Board game for Leo #gift', { id: `tx-${key}-split1/b` });
+      add(18, 'acc-everyday', -52.9, 'ShopNow', 'Electronics', 'Earbuds', { id: `tx-${key}-split1/a` });
+      add(18, 'acc-everyday', -33.5, 'ShopNow', 'Gifts', 'Board game for a birthday', { id: `tx-${key}-split1/b` });
     }
     if (back === 1) {
-      const d = 9;
-      add(d, 'acc-checking', -96.8, 'FreshMart', 'groceries', 'Big shop', { id: `tx-${key}-split2/a` });
-      add(d, 'acc-checking', -45.5, 'FreshMart', 'home', 'Cleaning supplies', { id: `tx-${key}-split2/b` });
+      add(9, 'acc-everyday', -64.8, 'FreshMart', 'Groceries', 'Big shop', { id: `tx-${key}-split2/a` });
+      add(9, 'acc-everyday', -21.5, 'FreshMart', 'Home', 'Cleaning supplies', { id: `tx-${key}-split2/b` });
     }
 
-    // Transfers: the card is paid off from checking, and some months 500 goes to savings.
-    const cardSpend = -month.filter(t => t.account === 'acc-card' && t.date <= `${key}-27`).reduce((a, t) => a + t.amount, 0) / 100;
-    transfer(28, 'acc-checking', 'acc-card', Math.round(cardSpend * 100) / 100, 'Card payment');
-    if (mo % 3 === 0) transfer(3, 'acc-checking', 'acc-savings', 500, 'To savings');
+    // Transfers never count: a monthly top-up of the everyday account and, every other month, savings.
+    transfer(28, 'acc-salary', 'acc-everyday', Math.round(between(700, 1000)), 'Monthly top-up');
+    if (cal % 2 === 1) transfer(28, 'acc-salary', 'acc-savings', 300, 'To savings');
 
     rawTrans.push(...month.filter(t => +t.date.slice(8) <= lastDay));
   }
 
-  const accountPayees = ACCOUNTS.map(a => ({ id: xfer(a.id), name: a.name, transfer_acct: a.id }));
   return {
     accounts: ACCOUNTS,
-    categories: CATEGORIES.map(([id, name, group]) => ({ id: `c-${id}`, name, group_id: group, is_income: group === 'income' })),
-    groups: GROUPS.map(([id, name]) => ({ id, name })),
-    payees: [...PAYEES.map(name => ({ id: pid(name), name })), ...accountPayees],
-    rawTrans: rawTrans.map(t => ({ ...t, category: t.category ? `c-${t.category}` : null })),
+    categories: GROUPS.flatMap(([group, cats]) => cats.map(name => ({ id: cid(name), name, group_id: slug(group), is_income: group === 'Income' }))),
+    groups: GROUPS.map(([name]) => ({ id: slug(name), name })),
+    payees: [...[...payeeNames].map(name => ({ id: pid(name), name })), ...ACCOUNTS.map(a => ({ id: xfer(a.id), name: a.name, transfer_acct: a.id }))],
+    rawTrans,
     updated: now.toISOString(),
   };
 }

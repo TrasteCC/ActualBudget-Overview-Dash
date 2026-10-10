@@ -21,6 +21,8 @@ export const EDITABLE: (keyof EditableSettings)[] = ['excludedAccounts', 'saving
 export class InvalidSetting extends Error {}
 
 export const isDemo = () => process.env.DEMO === '1' || process.env.DEMO === 'true';
+// The demo keeps edits and settings in memory, shared by every visitor, and drops them after this long.
+export const DEMO_RESET_MIN = 30;
 
 const list = (v: string | undefined) =>
   (v || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -50,9 +52,14 @@ export function envSettings(): Settings {
 
 const file = () => path.join(process.env.ACTUAL_DATA_DIR || './data', 'settings.json');
 
-// The demo is read-only: it never reads or writes settings.json.
+// The demo never touches settings.json: its overrides live in memory (on globalThis, shared by routes).
+const g = globalThis as typeof globalThis & { __abodDemoSettings?: { overrides: Partial<EditableSettings>; at: number } | null };
+
 function readOverrides(): Partial<EditableSettings> {
-  if (isDemo()) return {};
+  if (isDemo()) {
+    const m = g.__abodDemoSettings;
+    return m && Date.now() - m.at < DEMO_RESET_MIN * 60_000 ? m.overrides : {};
+  }
   try { return JSON.parse(fs.readFileSync(file(), 'utf8')); } catch { return {}; }
 }
 
@@ -117,6 +124,10 @@ export function saveSettings(input: Record<string, unknown>): Settings {
   const same = (a: unknown, b: unknown) =>
     JSON.stringify(Array.isArray(a) ? [...a].sort() : a) === JSON.stringify(Array.isArray(b) ? [...b].sort() : b);
   for (const k of EDITABLE) if (same(next[k], env[k])) delete next[k];
+  if (isDemo()) {
+    g.__abodDemoSettings = { overrides: next, at: Date.now() };
+    return getSettings();
+  }
   fs.mkdirSync(path.dirname(file()), { recursive: true });
   fs.writeFileSync(`${file()}.tmp`, JSON.stringify(next, null, 2));
   fs.renameSync(`${file()}.tmp`, file());
@@ -124,6 +135,7 @@ export function saveSettings(input: Record<string, unknown>): Settings {
 }
 
 export function resetSettings(): Settings {
-  fs.rmSync(file(), { force: true });
+  if (isDemo()) g.__abodDemoSettings = null;
+  else fs.rmSync(file(), { force: true });
   return getSettings();
 }

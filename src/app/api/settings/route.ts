@@ -35,7 +35,6 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  if (isDemo()) return NextResponse.json({ error: 'Settings are read-only in the demo' }, { status: 403 });
   try {
     saveSettings(await request.json());
     applied();
@@ -44,7 +43,6 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE() {
-  if (isDemo()) return NextResponse.json({ error: 'Settings are read-only in the demo' }, { status: 403 });
   try {
     resetSettings();
     applied();

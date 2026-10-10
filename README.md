@@ -89,8 +89,8 @@ curl -H "Authorization: Bearer $API_TOKEN" http://<host>:3000/api/summary
 ## Demo mode
 
 `DEMO=1` replaces your budget with generated data (14 months ending today, fixed seed): handy to
-try the dashboard before pointing it at a server. Edits stay in memory and reset every 30 minutes;
-settings are read-only.
+try the dashboard before pointing it at a server. Edits and settings stay in memory, are shared by
+everyone using that instance, and reset every 30 minutes.
 
 ```bash
 docker compose -f docker-compose.demo.yml up -d

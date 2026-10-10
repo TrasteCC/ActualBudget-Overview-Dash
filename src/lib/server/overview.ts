@@ -1,13 +1,11 @@
 import { getActual, syncNow } from './actual';
 import { demoSnapshot } from './demo';
-import { getSettings, isDemo, Settings } from './settings';
+import { DEMO_RESET_MIN, getSettings, isDemo, Settings } from './settings';
 
 // The Overview payload: last 12 months of counted totals, per-month category spend and the decorated
 // transaction rows, built from one in-memory snapshot of the budget. All filtering happens client-side.
 
 const SNAPSHOT_TTL_MS = 2 * 60 * 1000;
-// Demo edits live in the in-memory snapshot until it is regenerated.
-const DEMO_RESET_MIN = 30;
 
 export interface RawTx {
   id: string;
