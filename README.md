@@ -60,6 +60,7 @@ headless setups can use env alone.
 | `ACTUAL_E2E_PASSWORD` | unset | Only for end-to-end encrypted budgets |
 | `ACTUAL_INSECURE_TLS` | `0` | `1` to accept a self-signed certificate |
 | `DASH_PASSWORD` | unset | Dashboard login. Unset = no login screen (LAN-only) |
+| `API_TOKEN` | unset | Bearer token for read-only `GET /api/summary` and `/api/overview` (see below) |
 | `SYNC_INTERVAL_MIN` | `15` | Pull server changes every N minutes (the refresh button syncs now) |
 | `EXCLUDED_ACCOUNTS` | unset | Accounts left out of KPIs, by name or id, comma-separated. Off-budget accounts are always excluded |
 | `SAVINGS_TAG` | `#savings` | Tag in notes that marks savings; the "Excl. savings" figures leave it out |
@@ -70,6 +71,18 @@ headless setups can use env alone.
 
 Transfers between accounts and starting balances never count in the KPIs; transfers and
 excluded-account rows still appear in the list, greyed out.
+
+## API for other dashboards
+
+`GET /api/summary` returns the current month's income, expenses, net and averages as a small JSON
+object, for widgets in Homepage, Glance and the like. With `DASH_PASSWORD` set, call it with
+`Authorization: Bearer <API_TOKEN>`:
+
+```bash
+curl -H "Authorization: Bearer $API_TOKEN" http://<host>:3000/api/summary
+```
+
+`GET /api/health` is always open (Docker healthcheck).
 
 ## Demo mode
 

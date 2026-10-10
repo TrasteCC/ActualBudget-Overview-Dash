@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { COOKIE } from '@/lib/auth';
+import { COOKIE, sessionToken } from '@/lib/auth';
 
 export async function POST(req: Request) {
   const expected = process.env.DASH_PASSWORD;
@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   try { ({ password } = await req.json()); } catch { /* fall through */ }
   if (password !== expected) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const res = NextResponse.json({ success: true });
-  res.cookies.set(COOKIE, 'authenticated', {
+  res.cookies.set(COOKIE, await sessionToken(expected), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_INSECURE !== '1',
     sameSite: 'lax',
