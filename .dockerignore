@@ -2,7 +2,6 @@ node_modules
 .next
 out
 data
-spike
 .git
 .github
 *.log

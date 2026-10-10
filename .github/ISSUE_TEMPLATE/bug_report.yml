@@ -1,0 +1,38 @@
+name: Bug report
+description: Something is wrong or broken
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please never paste real transactions, account names, passwords or your Sync ID. Reproduce with `DEMO=1` if you can.
+  - type: input
+    id: image
+    attributes:
+      label: Image tag
+      placeholder: ghcr.io/trastecc/actualbudget-overview-dash:26.9
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: actual-server version
+      description: Open `https://<your-actual-server>/info`.
+      placeholder: "26.9.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`docker logs actualbudget-overview` (check them for personal data first)."
+      render: text

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "matchPackageNames": ["@actual-app/api"],
+      "groupName": "Actual API",
+      "rangeStrategy": "pin",
+      "labels": ["actual-release"],
+      "prBodyNotes": [
+        "Image tags follow Actual's version. After merging, tag the merge commit `v{{{newVersion}}}` so the workflow publishes the matching image tags."
+      ]
+    }
+  ]
+}

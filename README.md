@@ -9,6 +9,8 @@ directly: no extra API service, no database.
 
 > Not affiliated with the Actual Budget project.
 
+![Overview: KPIs, monthly summary, spending by category, tags and transactions](docs/screenshot-overview.png)
+
 ## Install
 
 Create a `.env` file (see [`.env.example`](.env.example) for every option):
@@ -48,6 +50,8 @@ sync interval. Changes apply at once and are saved to `/data/settings.json`. The
 variables below are the defaults; **Reset to defaults** on the settings page goes back to them, and
 headless setups can use env alone.
 
+<img src="docs/screenshot-settings.png" alt="Settings page" width="640">
+
 | Variable | Default | Meaning |
 |---|---|---|
 | `ACTUAL_SERVER_URL` | required | Your actual-server URL |
@@ -86,6 +90,10 @@ npm run dev
 ```
 
 `npm run build` produces a standalone Next.js server; the [`Dockerfile`](Dockerfile) packages it.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Never include real budget data in issues or pull requests.
 
 ## License
 
