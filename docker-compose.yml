@@ -1,0 +1,13 @@
+services:
+  overview:
+    image: ghcr.io/trastecc/actualbudget-overview-dash:latest
+    container_name: actualbudget-overview
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    volumes:
+      - overview-data:/data
+
+volumes:
+  overview-data:

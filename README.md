@@ -1,2 +1,76 @@
-# ActualBudget-Overview-Dash
-Awesome interactive dashboard for ActualBudget
+# ActualBudget Overview Dash
+
+A self-hosted overview dashboard for [Actual Budget](https://actualbudget.org): KPIs for the month,
+a 12-month summary, where the money goes by category, tags, and an editable transaction list.
+Everything filters client-side, so clicking a month, a category or a tag is instant.
+
+One container. It embeds the official `@actual-app/api` package, so it talks to your actual-server
+directly: no extra API service, no database.
+
+> Not affiliated with the Actual Budget project.
+
+## Install
+
+Create a `.env` file (see [`.env.example`](.env.example) for every option):
+
+```env
+ACTUAL_SERVER_URL=https://actual.example.com
+ACTUAL_PASSWORD=your-actual-server-password
+ACTUAL_SYNC_ID=00000000-0000-0000-0000-000000000000   # Actual → Settings → Advanced → Sync ID
+DASH_PASSWORD=choose-a-dashboard-password
+```
+
+Then either:
+
+```bash
+docker run -d --name actualbudget-overview -p 3000:3000 --env-file .env \
+  -v overview-data:/data ghcr.io/trastecc/actualbudget-overview-dash:latest
+```
+
+or use the included [`docker-compose.yml`](docker-compose.yml):
+
+```bash
+docker compose up -d
+```
+
+Open `http://<host>:3000`.
+
+### Version matching
+
+The bundled Actual API must match your actual-server's major version. Image tags follow Actual's
+`YY.M` scheme: run `ghcr.io/trastecc/actualbudget-overview-dash:26.9` against actual-server 26.9.x.
+`latest` tracks the newest Actual release.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ACTUAL_SERVER_URL` | required | Your actual-server URL |
+| `ACTUAL_PASSWORD` | required | Server password |
+| `ACTUAL_SYNC_ID` | required | Budget Sync ID (Settings → Advanced settings) |
+| `ACTUAL_E2E_PASSWORD` | unset | Only for end-to-end encrypted budgets |
+| `ACTUAL_INSECURE_TLS` | `0` | `1` to accept a self-signed certificate |
+| `DASH_PASSWORD` | unset | Dashboard login. Unset = no login screen (LAN-only) |
+| `SYNC_INTERVAL_MIN` | `15` | Pull server changes every N minutes (the refresh button syncs now) |
+| `EXCLUDED_ACCOUNTS` | unset | Accounts left out of KPIs, by name or id, comma-separated. Off-budget accounts are always excluded |
+| `SAVINGS_TAG` | `#savings` | Tag in notes that marks savings; the "Excl. savings" figures leave it out |
+| `HIDDEN_TAGS` | unset | Tags hidden from the tag strip (automation markers), comma-separated |
+| `LOCALE` / `CURRENCY` | `en-US` / `EUR` | Number formatting |
+| `HISTORY_SINCE` | 13 months ago | Earliest date loaded from the budget |
+
+Transfers between accounts and starting balances never count in the KPIs; transfers and
+excluded-account rows still appear in the list, greyed out.
+
+## Development
+
+```bash
+cp .env.example .env.local   # fill in your server
+npm install
+npm run dev
+```
+
+`npm run build` produces a standalone Next.js server; the [`Dockerfile`](Dockerfile) packages it.
+
+## License
+
+[MIT](LICENSE). Built on [`@actual-app/api`](https://www.npmjs.com/package/@actual-app/api) (MIT).
