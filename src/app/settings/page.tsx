@@ -17,7 +17,6 @@ interface State {
 
 interface Form {
   excluded: string[]; // account ids
-  savingsTag: string;
   hiddenTags: string;
   locale: string;
   currency: string;
@@ -34,7 +33,6 @@ function toForm(s: State): Form {
   const ex = s.settings.excludedAccounts;
   return {
     excluded: s.accounts.filter(a => !a.offbudget && (ex.includes(a.id.toLowerCase()) || ex.includes(a.name.toLowerCase()))).map(a => a.id),
-    savingsTag: s.settings.savingsTag,
     hiddenTags: s.settings.hiddenTags.join(', '),
     locale: s.settings.locale,
     currency: s.settings.currency,
@@ -100,7 +98,6 @@ export default function SettingsPage() {
 
   const save = () => call('PUT', {
     excludedAccounts: form.excluded,
-    savingsTag: form.savingsTag,
     hiddenTags: form.hiddenTags,
     locale: form.locale,
     currency: form.currency,
@@ -151,13 +148,7 @@ export default function SettingsPage() {
           {hint('excludedAccounts', d.excludedAccounts.join(', '))}
         </section>
 
-        <section className={`${panel} p-4 grid sm:grid-cols-2 gap-4`}>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-semibold">Savings tag</span>
-            <input className={input} value={form.savingsTag} onChange={e => set({ savingsTag: e.target.value })} placeholder="#savings" />
-            <span className="text-xs text-[#8a96a8]">Expenses with this tag in the notes are left out of “Excl. savings”.</span>
-            {hint('savingsTag', d.savingsTag)}
-          </label>
+        <section className={`${panel} p-4`}>
           <label className="flex flex-col gap-1.5">
             <span className="text-[13px] font-semibold">Hidden tags</span>
             <input className={input} value={form.hiddenTags} onChange={e => set({ hiddenTags: e.target.value })} placeholder="#auto, #imported" />

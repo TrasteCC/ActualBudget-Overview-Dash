@@ -48,7 +48,7 @@ The bundled Actual API must match your actual-server's major version. Image tags
 
 ## Configuration
 
-The gear icon opens the settings page: excluded accounts, tags, number format, history start and
+The gear icon opens the settings page: excluded accounts, hidden tags, number format, history start and
 sync interval. Changes apply at once and are saved to `/data/settings.json`. The environment
 variables below are the defaults; **Reset to defaults** on the settings page goes back to them, and
 headless setups can use env alone.
@@ -67,7 +67,6 @@ headless setups can use env alone.
 | `ACTUAL_DATA_DIR` | `/data` in the image | Budget cache and `settings.json` (mount a volume here) |
 | `SYNC_INTERVAL_MIN` | `15` | Pull server changes every N minutes (the refresh button syncs now) |
 | `EXCLUDED_ACCOUNTS` | unset | Accounts left out of KPIs, by name or id, comma-separated. Off-budget accounts are always excluded |
-| `SAVINGS_TAG` | `#savings` | Tag in notes that marks savings; the "Excl. savings" figures leave it out |
 | `HIDDEN_TAGS` | unset | Tags hidden from the tag strip (automation markers), comma-separated |
 | `LOCALE` / `CURRENCY` | `en-US` / `EUR` | Number formatting |
 | `HISTORY_SINCE` | 13 months ago | Earliest date loaded from the budget |

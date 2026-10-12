@@ -47,7 +47,6 @@ const num = 'font-mono tabular-nums';
 export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props) {
     const F = useMemo(() => makeFmt(data.settings.locale, data.settings.currency), [data.settings.locale, data.settings.currency]);
     const { money: eur, money0: eur0, short } = F;
-    const savingsTag = data.settings.savingsTag;
     const hiddenTags = useMemo(() => new Set(data.settings.hiddenTags), [data.settings.hiddenTags]);
     const [month, setMonth] = useState<string | null>(null);
     const [cat, setCat] = useState<string | null>(null);
@@ -63,14 +62,14 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
     const hasTag = useCallback((t: OverviewTransaction, g: string) => (txTags.get(t.id) || []).includes(g), [txTags]);
 
     // A selected category/group scopes the month totals and KPIs too, rebuilt from the counted
-    // transactions with the same rules as the server (sign split, savings-tag exclusion, averages).
+    // transactions with the same rules as the server (sign split, averages).
     const scoped = useMemo(() => {
         if (!cat && !group && !tag) return { months: data.months, averages: data.averages };
         const match = (t: OverviewTransaction) =>
             (!cat || t.category === cat) && (!group || (data.categoryGroup[t.category] || 'Other') === group) && (!tag || hasTag(t, tag));
         // A tag also rebuilds the per-category split (so "Where the money goes" shows only tagged spend);
         // a category/group keeps the full split so the other categories stay pickable.
-        const by = new Map(data.months.map(m => [m.key, { ...m, income: 0, expense: 0, expenseExclSavings: 0, categories: tag ? {} as Record<string, number> : m.categories }]));
+        const by = new Map(data.months.map(m => [m.key, { ...m, income: 0, expense: 0, categories: tag ? {} as Record<string, number> : m.categories }]));
         for (const t of data.transactions) {
             if (!t.counted) continue;
             const m = by.get(t.date.slice(0, 7));
@@ -79,7 +78,6 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
             if (!match(t)) continue;
             if (t.amount > 0) { m.income += t.amount; continue; }
             m.expense -= t.amount;
-            if (!t.notes?.toLowerCase().includes(savingsTag)) m.expenseExclSavings -= t.amount;
         }
         const months = data.months.map(m => by.get(m.key)!);
         const cur = data.currentMonth;
@@ -95,7 +93,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                 ltmExpense: total(months, 'expense') / 12,
             },
         };
-    }, [data, cat, group, tag, hasTag, savingsTag]);
+    }, [data, cat, group, tag, hasTag]);
     const scopeLabel = [tag && `#${tag.slice(1)}`, cat || group].filter(Boolean).join(' · ');
 
     const km = month || data.currentMonth;
@@ -178,17 +176,17 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
     const ytdExp = ytdMonths.reduce((a, m) => a + m.expense, 0);
     const ytdInc = ytdMonths.reduce((a, m) => a + m.income, 0);
     const ytdSpan = `Jan–${mShort(data.currentMonth)} ${yearKey}`;
+    // Three rows of three: the selected month, then expenses, then income.
     const kpis: { label: string; period: string; value: string; color: string; sub: string; active: boolean; onClick: () => void; ytd?: boolean }[] = [
         { label: 'Expenses', period: mLong(km), value: eur(mi.expense), color: EXP, sub: vsAvg(mi.expense, scoped.averages.ltmExpense), active: kind === 'exp' && !!month, onClick: () => { setKind('exp'); setMonth(km); } },
-        { label: 'Excl. savings', period: mLong(km), value: eur(mi.expenseExclSavings), color: EXP, sub: `without ${savingsTag}`, active: false, onClick: () => { setKind('exp'); setMonth(km); } },
         { label: 'Income', period: mLong(km), value: eur(mi.income), color: INC, sub: vsAvg(mi.income, scoped.averages.ltmIncome), active: kind === 'inc', onClick: () => { setKind('inc'); setMonth(km); } },
         { label: 'Net', period: mLong(km), value: signed(net, eur), color: net >= 0 ? NET : EXP, sub: rate !== null && rate > -100 ? `savings rate ${rate.toFixed(0)}%` : 'month in progress', active: kind === 'all', onClick: () => { setKind('all'); setMonth(km); } },
         { label: 'Total exp.', period: 'YTD', value: eur(ytdExp), color: EXP, sub: ytdSpan, active: false, ytd: true, onClick: () => { setKind('exp'); setMonth(null); } },
         { label: 'Avg expenses', period: 'YTD', value: eur(scoped.averages.ytdExpense), color: '#c9d2de', sub: 'full months this year', active: false, onClick: () => { setKind('exp'); setMonth(null); } },
-        { label: 'Avg income', period: 'YTD', value: eur(scoped.averages.ytdIncome), color: '#c9d2de', sub: 'full months this year', active: false, onClick: () => { setKind('inc'); setMonth(null); } },
         { label: 'Avg expenses', period: 'LTM', value: eur(scoped.averages.ltmExpense), color: '#9aa6b6', sub: 'last 12 months', active: false, onClick: () => { setKind('exp'); setMonth(null); } },
-        { label: 'Avg income', period: 'LTM', value: eur(scoped.averages.ltmIncome), color: '#9aa6b6', sub: 'last 12 months', active: false, onClick: () => { setKind('inc'); setMonth(null); } },
         { label: 'Total inc.', period: 'YTD', value: eur(ytdInc), color: INC, sub: ytdSpan, active: false, ytd: true, onClick: () => { setKind('inc'); setMonth(null); } },
+        { label: 'Avg income', period: 'YTD', value: eur(scoped.averages.ytdIncome), color: '#c9d2de', sub: 'full months this year', active: false, onClick: () => { setKind('inc'); setMonth(null); } },
+        { label: 'Avg income', period: 'LTM', value: eur(scoped.averages.ltmIncome), color: '#9aa6b6', sub: 'last 12 months', active: false, onClick: () => { setKind('inc'); setMonth(null); } },
     ];
 
     const chips: { label: string; clear: () => void }[] = [];
@@ -333,7 +331,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                 {(
                     <>
                         {/* ── KPI ticker ── */}
-                        <section aria-label="Key figures" className="grid grid-cols-2 sm:grid-cols-5 2xl:grid-cols-10 gap-2">
+                        <section aria-label="Key figures" className="grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-9 gap-2">
                             {kpis.map((k, i) => (
                                 <button
                                     key={i}
@@ -356,12 +354,11 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                     {scopeLabel && <span className="rounded-full border border-[#2c4a74] bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-[#bcd6fb]">{scopeLabel}</span>}
                                     <span className="text-[11.5px] text-[#75829a]">Click a row to filter · again to clear</span>
                                 </div>
-                                <div className={`grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_78px_44px] gap-2.5 px-2 py-1 min-w-[640px] ${label}`}>
-                                    <span>Month</span><span>Income</span><span>Expenses</span><span className="text-right">Net</span><span className="text-right" title={`Net excluding savings: income minus expenses without ${savingsTag}`}>Net ES</span><span className="text-right">Rate</span>
+                                <div className={`grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_44px] gap-2.5 px-2 py-1 min-w-[560px] ${label}`}>
+                                    <span>Month</span><span>Income</span><span>Expenses</span><span className="text-right">Net</span><span className="text-right">Rate</span>
                                 </div>
                                 {scoped.months.map(m => {
                                     const n = m.income - m.expense;
-                                    const nes = m.income - m.expenseExclSavings; // same exclusion as the "Excl. savings" KPI
                                     const sel = month === m.key;
                                     const dim = !!month && !sel;
                                     const r = m.income > 0 ? (n / m.income) * 100 : null;
@@ -371,13 +368,12 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                             type="button"
                                             onClick={() => pickMonth(m.key)}
                                             aria-pressed={sel}
-                                            className={`w-full min-w-[640px] grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_78px_44px] gap-2.5 items-center px-2 py-[5px] rounded border-l-2 text-left ${focus} ${hover} ${sel ? 'border-blue-400 bg-blue-500/10' : 'border-transparent'}`}
+                                            className={`w-full min-w-[560px] grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_44px] gap-2.5 items-center px-2 py-[5px] rounded border-l-2 text-left ${focus} ${hover} ${sel ? 'border-blue-400 bg-blue-500/10' : 'border-transparent'}`}
                                         >
                                             <span className="text-[12.5px] font-semibold text-[#c9d2de]">{mShort(m.key)} <span className="font-normal text-[#66738a]">{m.key.slice(2, 4)}</span></span>
                                             <BarCell value={m.income} scale={monthScale.cap} color={INC} textColor="#9ce5c6" dim={dim} fmt={F} />
                                             <BarCell value={m.expense} scale={monthScale.cap} color={EXP} textColor="#fcb3be" dim={dim} fmt={F} />
                                             <span className={`${num} text-right text-xs font-semibold`} style={{ color: n >= 0 ? NET : EXP }}>{signed(n, eur0)}</span>
-                                            <span className={`${num} text-right text-xs`} style={{ color: nes >= 0 ? NET : EXP }}>{signed(nes, eur0)}</span>
                                             <span className={`${num} text-right text-[11.5px] text-[#9aa6b6]`}>{r !== null && r > -100 ? `${r.toFixed(0)}%` : '—'}</span>
                                         </button>
                                     );

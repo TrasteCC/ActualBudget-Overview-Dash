@@ -64,8 +64,8 @@ const SPEND: [string, [number, number] | number, [number, number], string[]][] =
   ['Bank fees', 0.3, [0.5, 4], ['Bank']],
 ];
 
-// Big one-offs paid from savings, by calendar month: [day, category, payee, amount, note]
-const FROM_SAVINGS: Record<number, [number, string, string, number, string][]> = {
+// Big one-off purchases, by calendar month: [day, category, payee, amount, note]
+const BIG_PURCHASES: Record<number, [number, string, string, number, string][]> = {
   1: [[14, 'Electronics', 'Gadget Store', 310, 'New laptop'], [22, 'Home', 'HomeBox', 140, 'Desk chair']],
   2: [[9, 'Home', 'Nordic Home', 220, 'Sofa'], [20, 'Gifts', 'GiftHub', 164, 'Wedding gift']],
   3: [[3, 'Community fees', 'Building community', 500, 'Roof repair levy'], [6, 'Electronics', 'PC Parts Direct', 150, 'Monitor'],
@@ -202,7 +202,7 @@ export function demoSnapshot(): Snapshot {
       spend(28, 'Travel', [3, 45], ['Old Town Café', 'City Museum', 'Market Hall', 'Tram Tickets', 'Schnitzel Corner'], '#trip-vienna', d);
     }
 
-    for (const [d, category, payee, eur, note] of FROM_SAVINGS[cal] || []) add(d, 'acc-salary', -eur, payee, category, `${note} #savings`);
+    for (const [d, category, payee, eur, note] of BIG_PURCHASES[cal] || []) add(d, 'acc-salary', -eur, payee, category, `${note} #big-purchase`);
 
     // Two split purchases: each parent's children carry the categories (as the live loader expands them).
     if (back === 2) {

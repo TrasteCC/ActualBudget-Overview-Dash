@@ -47,12 +47,12 @@ export interface OverviewTransaction {
 
 export interface OverviewData {
   currentMonth: string;
-  months: { key: string; income: number; expense: number; expenseExclSavings: number; categories: Record<string, number> }[];
+  months: { key: string; income: number; expense: number; categories: Record<string, number> }[];
   averages: { ytdIncome: number; ytdExpense: number; ltmIncome: number; ltmExpense: number };
   categoryGroup: Record<string, string>;
   transactions: OverviewTransaction[];
   metadata: { updated: string; allCategories: { id: string; name: string }[]; allPayees: { id: string; name: string }[] };
-  settings: { actualUrl: string; savingsTag: string; hiddenTags: string[]; locale: string; currency: string; demo: boolean };
+  settings: { actualUrl: string; hiddenTags: string[]; locale: string; currency: string; demo: boolean };
 }
 
 // On globalThis so every route bundle shares one snapshot (the settings route invalidates it).
@@ -160,19 +160,17 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
   const currentMonth = monthKeys[11];
   const windowTrans = rawTrans.filter(t => t.date >= `${monthKeys[0]}-01`);
   const kpiTrans = windowTrans.filter(counted).map(map);
-  const savings = settings.savingsTag;
 
   const months = monthKeys.map(k => {
     const cats: Record<string, number> = {};
-    let inc = 0, exp = 0, excl = 0;
+    let inc = 0, exp = 0;
     for (const t of kpiTrans) {
       if (!t.date.startsWith(k)) continue;
       if (t.amount > 0) { inc += t.amount; continue; }
       exp -= t.amount;
-      if (!t.notes.toLowerCase().includes(savings)) excl -= t.amount;
       cats[t.category] = (cats[t.category] || 0) - t.amount;
     }
-    return { key: k, income: inc, expense: exp, expenseExclSavings: excl, categories: cats };
+    return { key: k, income: inc, expense: exp, categories: cats };
   });
 
   const year = now.getFullYear();
@@ -205,7 +203,6 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
     },
     settings: {
       actualUrl: settings.actualUrl,
-      savingsTag: settings.savingsTag,
       hiddenTags: settings.hiddenTags,
       locale: settings.locale,
       currency: settings.currency,

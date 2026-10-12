@@ -16,7 +16,6 @@ export async function GET(request: NextRequest) {
       month: d.currentMonth,
       income: r2(m.income),
       expense: r2(m.expense),
-      expenseExclSavings: r2(m.expenseExclSavings),
       net: r2(m.income - m.expense),
       averages: Object.fromEntries(Object.entries(d.averages).map(([k, v]) => [k, r2(v)])),
       currency: d.settings.currency,
