@@ -285,7 +285,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
             <main className="flex-1 min-w-0 flex flex-col gap-3 px-3 sm:px-5 pt-4 pb-32">
                 {data.settings.demo && (
                     <p className="rounded-lg border border-amber-400/30 bg-amber-400/[0.07] px-3 py-1.5 text-xs text-amber-200">
-                        Demo data — nothing here is real. Edits and settings are shared and reset every half hour.
+                        Demo data — nothing here is real. Your edits and settings are only visible to you and reset after 30 minutes.
                     </p>
                 )}
                 {/* ── Top bar: search, active filters, refresh ── */}

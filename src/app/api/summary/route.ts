@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { demoVisitor } from '@/lib/server/demo-state';
 import { buildOverview } from '@/lib/server/overview';
 
 export const runtime = 'nodejs';
@@ -7,9 +8,9 @@ export const dynamic = 'force-dynamic';
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 // Current-month figures for other dashboards (a few hundred bytes instead of the full Overview).
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const d = await buildOverview();
+    const d = await buildOverview(false, demoVisitor(request));
     const m = d.months.find(x => x.key === d.currentMonth)!;
     return NextResponse.json({
       month: d.currentMonth,

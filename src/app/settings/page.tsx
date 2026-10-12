@@ -120,7 +120,7 @@ export default function SettingsPage() {
 
         {state.demo && (
           <p className="rounded-lg border border-amber-400/30 bg-amber-400/[0.07] px-3 py-2 text-xs text-amber-200">
-            Demo: changes are shared with other visitors and reset every 30 minutes. On your own install they are saved to <code>/data/settings.json</code>.
+            Demo: your changes are only visible to you and reset after 30 minutes. On your own install they are saved to <code>/data/settings.json</code>.
           </p>
         )}
 

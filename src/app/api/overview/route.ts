@@ -3,6 +3,7 @@ import { gzipSync } from 'node:zlib';
 import { buildOverview, editDemoTransaction, invalidateSnapshot } from '@/lib/server/overview';
 import { getActual } from '@/lib/server/actual';
 import { isDemo } from '@/lib/server/settings';
+import { claimVisitor, demoVisitor, withVisitor } from '@/lib/server/demo-state';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const refresh = request.nextUrl.searchParams.get('refresh') === '1';
-    const body = JSON.stringify(await buildOverview(refresh));
+    const body = JSON.stringify(await buildOverview(refresh, demoVisitor(request)));
     // ~1 MB of JSON; route handlers are not compressed by Next, so gzip here (~10x smaller).
     if (request.headers.get('accept-encoding')?.includes('gzip')) {
       return new NextResponse(new Uint8Array(gzipSync(body)), {
@@ -39,7 +40,9 @@ export async function PATCH(request: NextRequest) {
     if (typeof amount === 'number' && Number.isFinite(amount) && Math.abs(amount) < 1e9) fields.amount = Math.round(amount * 100);
     if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) fields.date = date;
     if (isDemo()) {
-      await editDemoTransaction(id, fields);
+      const visitor = claimVisitor(request)!;
+      await editDemoTransaction(id, fields, visitor);
+      return withVisitor(NextResponse.json({ success: true }), visitor);
     } else {
       const api = await getActual();
       await api.updateTransaction(id, fields);

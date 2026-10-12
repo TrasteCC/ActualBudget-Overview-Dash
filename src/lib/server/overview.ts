@@ -1,6 +1,7 @@
 import { getActual, syncNow } from './actual';
 import { demoSnapshot } from './demo';
-import { DEMO_RESET_MIN, getSettings, isDemo, Settings } from './settings';
+import { DEMO_RESET_MIN, demoState } from './demo-state';
+import { getSettings, isDemo, Settings } from './settings';
 
 // The Overview payload: last 12 months of counted totals, per-month category spend and the decorated
 // transaction rows, built from one in-memory snapshot of the budget. All filtering happens client-side.
@@ -105,18 +106,24 @@ export async function getSnapshot(settings: Settings, refresh = false): Promise<
   return state.inflight;
 }
 
-// PATCH in demo mode: edit the in-memory snapshot only. Notes are capped since the public demo is shared.
-export async function editDemoTransaction(id: string, fields: Record<string, unknown>) {
-  const t = (await getSnapshot(getSettings())).rawTrans.find(r => r.id === id);
-  if (!t) throw new Error('Transaction not found');
-  Object.assign(t, fields, typeof fields.notes === 'string' ? { notes: fields.notes.slice(0, 120) } : {});
+// PATCH in demo mode: the edit is kept for that visitor only and laid over the shared made-up data.
+const demoEdits = demoState<Record<string, Partial<RawTx>>>('edits');
+
+export async function editDemoTransaction(id: string, fields: Record<string, unknown>, visitor: string) {
+  if (!(await getSnapshot(getSettings(visitor))).rawTrans.some(r => r.id === id)) throw new Error('Transaction not found');
+  const edits = { ...demoEdits.get(visitor) };
+  if (!edits[id] && Object.keys(edits).length >= 200) throw new Error('Too many demo edits');
+  edits[id] = { ...edits[id], ...fields, ...(typeof fields.notes === 'string' ? { notes: fields.notes.slice(0, 120) } : {}) };
+  demoEdits.set(visitor, edits);
 }
 
 const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-export async function buildOverview(refresh = false): Promise<OverviewData> {
-  const settings = getSettings();
+export async function buildOverview(refresh = false, visitor?: string): Promise<OverviewData> {
+  const settings = getSettings(visitor);
   const snap = await getSnapshot(settings, refresh);
+  const edits = demoEdits.get(visitor);
+  const rawTrans = edits ? snap.rawTrans.map(t => (edits[t.id] ? { ...t, ...edits[t.id] } : t)) : snap.rawTrans;
 
   const accountName = new Map(snap.accounts.map(a => [a.id, a.name]));
   const categoryName = new Map(snap.categories.map(c => [c.id, c.name]));
@@ -151,7 +158,7 @@ export async function buildOverview(refresh = false): Promise<OverviewData> {
   const now = new Date();
   const monthKeys = Array.from({ length: 12 }, (_, i) => monthKey(new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)));
   const currentMonth = monthKeys[11];
-  const windowTrans = snap.rawTrans.filter(t => t.date >= `${monthKeys[0]}-01`);
+  const windowTrans = rawTrans.filter(t => t.date >= `${monthKeys[0]}-01`);
   const kpiTrans = windowTrans.filter(counted).map(map);
   const savings = settings.savingsTag;
 

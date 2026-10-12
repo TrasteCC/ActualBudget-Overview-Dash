@@ -1,5 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { demoState, isDemo } from './demo-state';
+
+export { isDemo };
 
 // Every rule the dashboard applies is configuration, never code. The environment gives the defaults;
 // the settings page saves overrides to settings.json in the data volume, and "Reset" deletes them.
@@ -20,9 +23,6 @@ export const EDITABLE: (keyof EditableSettings)[] = ['excludedAccounts', 'saving
 
 export class InvalidSetting extends Error {}
 
-export const isDemo = () => process.env.DEMO === '1' || process.env.DEMO === 'true';
-// The demo keeps edits and settings in memory, shared by every visitor, and drops them after this long.
-export const DEMO_RESET_MIN = 30;
 
 const list = (v: string | undefined) =>
   (v || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -58,26 +58,23 @@ export function envSettings(): Settings {
 
 const file = () => path.join(process.env.ACTUAL_DATA_DIR || './data', 'settings.json');
 
-// The demo never touches settings.json: its overrides live in memory (on globalThis, shared by routes).
-const g = globalThis as typeof globalThis & { __abodDemoSettings?: { overrides: Partial<EditableSettings>; at: number } | null };
+// The demo never touches settings.json: each visitor's overrides live in memory (see demo-state.ts).
+const demoSettings = demoState<Partial<EditableSettings>>('settings');
 
-function readOverrides(): Partial<EditableSettings> {
-  if (isDemo()) {
-    const m = g.__abodDemoSettings;
-    return m && Date.now() - m.at < DEMO_RESET_MIN * 60_000 ? m.overrides : {};
-  }
+function readOverrides(visitor?: string): Partial<EditableSettings> {
+  if (isDemo()) return demoSettings.get(visitor) || {};
   try { return JSON.parse(fs.readFileSync(file(), 'utf8')); } catch { return {}; }
 }
 
-export function getSettings(): Settings {
-  const o = readOverrides();
+export function getSettings(visitor?: string): Settings {
+  const o = readOverrides(visitor);
   const s = envSettings();
   for (const k of EDITABLE) if (o[k] !== undefined) (s as unknown as Record<string, unknown>)[k] = o[k];
   return s;
 }
 
-export function overriddenKeys(): (keyof EditableSettings)[] {
-  const o = readOverrides();
+export function overriddenKeys(visitor?: string): (keyof EditableSettings)[] {
+  const o = readOverrides(visitor);
   return EDITABLE.filter(k => o[k] !== undefined);
 }
 
@@ -124,15 +121,15 @@ function validate(b: Record<string, unknown>): Partial<EditableSettings> {
 }
 
 // Only values that differ from the environment are stored, so untouched fields keep following env.
-export function saveSettings(input: Record<string, unknown>): Settings {
-  const next: Partial<EditableSettings> = { ...readOverrides(), ...validate(input) };
+export function saveSettings(input: Record<string, unknown>, visitor?: string): Settings {
+  const next: Partial<EditableSettings> = { ...readOverrides(visitor), ...validate(input) };
   const env = envSettings();
   const same = (a: unknown, b: unknown) =>
     JSON.stringify(Array.isArray(a) ? [...a].sort() : a) === JSON.stringify(Array.isArray(b) ? [...b].sort() : b);
   for (const k of EDITABLE) if (same(next[k], env[k])) delete next[k];
   if (isDemo()) {
-    g.__abodDemoSettings = { overrides: next, at: Date.now() };
-    return getSettings();
+    if (visitor) demoSettings.set(visitor, next);
+    return getSettings(visitor);
   }
   fs.mkdirSync(path.dirname(file()), { recursive: true });
   fs.writeFileSync(`${file()}.tmp`, JSON.stringify(next, null, 2));
@@ -140,8 +137,8 @@ export function saveSettings(input: Record<string, unknown>): Settings {
   return getSettings();
 }
 
-export function resetSettings(): Settings {
-  if (isDemo()) g.__abodDemoSettings = null;
+export function resetSettings(visitor?: string): Settings {
+  if (isDemo()) demoSettings.delete(visitor);
   else fs.rmSync(file(), { force: true });
-  return getSettings();
+  return getSettings(visitor);
 }

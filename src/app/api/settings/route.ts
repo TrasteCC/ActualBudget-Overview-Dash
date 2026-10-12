@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rescheduleSync } from '@/lib/server/actual';
+import { claimVisitor, demoVisitor, withVisitor } from '@/lib/server/demo-state';
 import { getSnapshot, invalidateSnapshot } from '@/lib/server/overview';
 import { EDITABLE, envSettings, getSettings, InvalidSetting, isDemo, overriddenKeys, resetSettings, saveSettings, Settings } from '@/lib/server/settings';
 
@@ -9,13 +10,13 @@ export const dynamic = 'force-dynamic';
 const editable = (s: Settings) => Object.fromEntries(EDITABLE.map(k => [k, s[k]]));
 
 // The settings stay editable when Actual is unreachable; only the account list needs the budget.
-async function state() {
+async function state(visitor?: string) {
   let accountsError: string | null = null;
-  const snap = await getSnapshot(getSettings()).catch(err => { accountsError = err instanceof Error ? err.message : String(err); return null; });
+  const snap = await getSnapshot(getSettings(visitor)).catch(err => { accountsError = err instanceof Error ? err.message : String(err); return null; });
   return {
-    settings: editable(getSettings()),
+    settings: editable(getSettings(visitor)),
     defaults: editable(envSettings()),
-    overridden: overriddenKeys(),
+    overridden: overriddenKeys(visitor),
     accounts: (snap?.accounts || []).filter(a => !a.closed).map(a => ({ id: a.id, name: a.name, offbudget: a.offbudget })),
     accountsError,
     demo: isDemo(),
@@ -28,30 +29,32 @@ const fail = (err: unknown) => {
 };
 
 // Saving or resetting drops the cached snapshot and restarts the sync countdown, so it applies at once.
-// The demo snapshot does not depend on settings, and dropping it would also drop visitors' edits.
+// The demo snapshot does not depend on settings, so there is nothing to rebuild.
 function applied() {
   if (!isDemo()) invalidateSnapshot();
   rescheduleSync();
 }
 
-export async function GET() {
-  try { return NextResponse.json(await state()); } catch (err) { return fail(err); }
+export async function GET(request: NextRequest) {
+  try { return NextResponse.json(await state(demoVisitor(request))); } catch (err) { return fail(err); }
 }
 
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ error: 'Expected a JSON object' }, { status: 400 });
-    saveSettings(body);
+    const visitor = claimVisitor(request);
+    saveSettings(body, visitor);
     applied();
-    return NextResponse.json(await state());
+    return withVisitor(NextResponse.json(await state(visitor)), visitor);
   } catch (err) { return fail(err); }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
-    resetSettings();
+    const visitor = demoVisitor(request);
+    resetSettings(visitor);
     applied();
-    return NextResponse.json(await state());
+    return NextResponse.json(await state(visitor));
   } catch (err) { return fail(err); }
 }

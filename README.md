@@ -9,7 +9,7 @@ directly: no extra API service, no database.
 
 > Not affiliated with the Actual Budget project.
 
-**Try the demo:** <https://actual-dash.marcecastro.com> (made-up data; edits reset every 30 minutes).
+**Try the demo:** <https://actual-dash.marcecastro.com> (made-up data; your edits are private to you and reset after 30 minutes).
 
 ![Overview: KPIs, monthly summary, spending by category, tags and transactions](docs/screenshot-overview.png)
 
@@ -91,8 +91,8 @@ curl -H "Authorization: Bearer $API_TOKEN" http://<host>:3000/api/summary
 ## Demo mode
 
 `DEMO=1` replaces your budget with generated data (14 months ending today, fixed seed): handy to
-try the dashboard before pointing it at a server. Edits and settings stay in memory, are shared by
-everyone using that instance, and reset every 30 minutes.
+try the dashboard before pointing it at a server. Edits and settings stay in memory, apply only to the
+visitor who made them (a browser cookie), and reset after 30 minutes.
 
 ```bash
 docker compose -f docker-compose.demo.yml up -d
