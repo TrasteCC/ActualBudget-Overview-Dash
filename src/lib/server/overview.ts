@@ -141,10 +141,16 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
       .map(a => a.id),
   );
   const transferPayees = new Set(snap.payees.filter(p => p.transfer_acct).map(p => p.id));
-  const isExcludedAccount = (t: RawTx) => excludedAccountIds.has(t.account);
+  // EXCLUDED_CATEGORIES (name or id): money set aside rather than spent, e.g. savings or investment contributions.
+  const excludedCategoryIds = new Set(
+    snap.categories
+      .filter(c => settings.excludedCategories.includes(c.id) || settings.excludedCategories.includes(c.name.toLowerCase()))
+      .map(c => c.id),
+  );
+  const isExcludedRow = (t: RawTx) => excludedAccountIds.has(t.account) || (!!t.category && excludedCategoryIds.has(t.category));
   const isTransfer = (t: RawTx) => !t.category && (!!t.transfer_id || (!!t.payee && transferPayees.has(t.payee)));
   const isIncome = (t: RawTx) => (t.category ? incomeCategories.has(t.category) : t.amount > 0);
-  const counted = (t: RawTx) => !isExcludedAccount(t) && !isTransfer(t) && !t.starting_balance_flag;
+  const counted = (t: RawTx) => !isExcludedRow(t) && !isTransfer(t) && !t.starting_balance_flag;
 
   const map = (t: RawTx): OverviewTransaction => ({
     id: t.id,
@@ -156,7 +162,7 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
     categoryId: t.category || undefined,
     notes: t.notes || '',
     account: accountName.get(t.account) || t.account,
-    isExcluded: isExcludedAccount(t) || isTransfer(t),
+    isExcluded: isExcludedRow(t) || isTransfer(t),
     counted: counted(t),
     income: isIncome(t),
   });

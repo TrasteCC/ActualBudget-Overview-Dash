@@ -18,6 +18,7 @@ async function state(visitor?: string) {
     defaults: editable(envSettings()),
     overridden: overriddenKeys(visitor),
     accounts: (snap?.accounts || []).filter(a => !a.closed).map(a => ({ id: a.id, name: a.name, offbudget: a.offbudget })),
+    categories: (snap?.categories || []).filter(c => !c.is_income).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)),
     accountsError,
     demo: isDemo(),
   };
