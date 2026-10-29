@@ -11,12 +11,14 @@ interface State {
   defaults: EditableSettings;
   overridden: (keyof EditableSettings)[];
   accounts: { id: string; name: string; offbudget: boolean }[];
+  categories: { id: string; name: string }[];
   accountsError: string | null;
   demo: boolean;
 }
 
 interface Form {
   excluded: string[]; // account ids
+  excludedCats: string[]; // category ids
   hiddenTags: string;
   locale: string;
   currency: string;
@@ -31,8 +33,10 @@ const input = `w-full h-9 px-3 rounded-[9px] bg-[#0e141d] border border-[#1e2835
 // Settings are stored as names or ids (env accepts both); the form works with ids.
 function toForm(s: State): Form {
   const ex = s.settings.excludedAccounts;
+  const exCats = s.settings.excludedCategories;
   return {
     excluded: s.accounts.filter(a => !a.offbudget && (ex.includes(a.id.toLowerCase()) || ex.includes(a.name.toLowerCase()))).map(a => a.id),
+    excludedCats: s.categories.filter(c => exCats.includes(c.id.toLowerCase()) || exCats.includes(c.name.toLowerCase())).map(c => c.id),
     hiddenTags: s.settings.hiddenTags.join(', '),
     locale: s.settings.locale,
     currency: s.settings.currency,
@@ -98,6 +102,7 @@ export default function SettingsPage() {
 
   const save = () => call('PUT', {
     excludedAccounts: form.excluded,
+    excludedCategories: form.excludedCats,
     hiddenTags: form.hiddenTags,
     locale: form.locale,
     currency: form.currency,
@@ -146,6 +151,27 @@ export default function SettingsPage() {
           </div>
           {state.accountsError && <p className="text-xs text-rose-300">Could not load the accounts from Actual: {state.accountsError}</p>}
           {hint('excludedAccounts', d.excludedAccounts.join(', '))}
+        </section>
+
+        <section className={`${panel} p-4 flex flex-col gap-3`}>
+          <div>
+            <h2 className="text-[13px] font-semibold">Categories left out of the KPIs</h2>
+            <p className="text-xs text-[#8a96a8]">For money set aside rather than spent, like savings or investment contributions. Their transactions still show in the list, greyed out.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1">
+            {state.categories.map(c => (
+              <label key={c.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] hover:bg-white/[0.04] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.excludedCats.includes(c.id)}
+                  onChange={e => set({ excludedCats: e.target.checked ? [...form.excludedCats, c.id] : form.excludedCats.filter(id => id !== c.id) })}
+                  className="w-4 h-4 accent-blue-500"
+                />
+                <span className="flex-1">{c.name}</span>
+              </label>
+            ))}
+          </div>
+          {hint('excludedCategories', d.excludedCategories.join(', '))}
         </section>
 
         <section className={`${panel} p-4`}>
