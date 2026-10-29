@@ -62,7 +62,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
     const hasTag = useCallback((t: OverviewTransaction, g: string) => (txTags.get(t.id) || []).includes(g), [txTags]);
 
     // A selected category/group scopes the month totals and KPIs too, rebuilt from the counted
-    // transactions with the same rules as the server (sign split, averages).
+    // transactions with the same rules as the server (income/expense split, averages).
     const scoped = useMemo(() => {
         if (!cat && !group && !tag) return { months: data.months, averages: data.averages };
         const match = (t: OverviewTransaction) =>
@@ -74,9 +74,9 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
             if (!t.counted) continue;
             const m = by.get(t.date.slice(0, 7));
             if (!m) continue;
-            if (tag && t.amount < 0 && hasTag(t, tag)) m.categories[t.category] = (m.categories[t.category] || 0) - t.amount;
+            if (tag && !t.income && hasTag(t, tag)) m.categories[t.category] = (m.categories[t.category] || 0) - t.amount;
             if (!match(t)) continue;
-            if (t.amount > 0) { m.income += t.amount; continue; }
+            if (t.income) { m.income += t.amount; continue; }
             m.expense -= t.amount;
         }
         const months = data.months.map(m => by.get(m.key)!);
@@ -139,7 +139,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
     const filtered = useMemo(() => {
         let tx = data.transactions.filter(t =>
             (!month || t.date.startsWith(month)) &&
-            (kind === 'all' || (kind === 'exp' ? t.amount < 0 : t.amount > 0)) &&
+            (kind === 'all' || (kind === 'exp') !== !!t.income) &&
             (!cat || t.category === cat) &&
             (!group || (data.categoryGroup[t.category] || 'Other') === group) &&
             (!tag || hasTag(t, tag)) &&
@@ -154,7 +154,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
     const tagView = useMemo(() => {
         const sums = new Map<string, number>();
         for (const t of data.transactions) {
-            if (!t.counted || t.amount >= 0 || (month && !t.date.startsWith(month))) continue;
+            if (!t.counted || t.income || (month && !t.date.startsWith(month))) continue;
             for (const g of txTags.get(t.id) || []) sums.set(g, (sums.get(g) || 0) - t.amount);
         }
         const entries = Array.from(sums.entries()).sort((a, b) => b[1] - a[1]);

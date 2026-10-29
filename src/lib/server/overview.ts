@@ -43,6 +43,8 @@ export interface OverviewTransaction {
   account?: string;
   isExcluded?: boolean;
   counted?: boolean;
+  // Income side: an income category, or an uncategorized inflow. Refunds in an expense category stay expenses.
+  income?: boolean;
 }
 
 export interface OverviewData {
@@ -129,8 +131,10 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
   const categoryName = new Map(snap.categories.map(c => [c.id, c.name]));
   const payeeName = new Map(snap.payees.map(p => [p.id, p.name]));
   const groupName = new Map(snap.groups.map(g => [g.id, g.name]));
+  const incomeCategories = new Set(snap.categories.filter(c => c.is_income).map(c => c.id));
 
   // Excluded from KPIs: off-budget accounts, EXCLUDED_ACCOUNTS (name or id), transfers, starting balances.
+  // A transfer to an off-budget account carries a category (a mortgage payment, say) and counts, as in Actual.
   const excludedAccountIds = new Set(
     snap.accounts
       .filter(a => a.offbudget || settings.excludedAccounts.includes(a.id) || settings.excludedAccounts.includes(a.name.toLowerCase()))
@@ -138,7 +142,8 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
   );
   const transferPayees = new Set(snap.payees.filter(p => p.transfer_acct).map(p => p.id));
   const isExcludedAccount = (t: RawTx) => excludedAccountIds.has(t.account);
-  const isTransfer = (t: RawTx) => !!t.transfer_id || (!!t.payee && transferPayees.has(t.payee));
+  const isTransfer = (t: RawTx) => !t.category && (!!t.transfer_id || (!!t.payee && transferPayees.has(t.payee)));
+  const isIncome = (t: RawTx) => (t.category ? incomeCategories.has(t.category) : t.amount > 0);
   const counted = (t: RawTx) => !isExcludedAccount(t) && !isTransfer(t) && !t.starting_balance_flag;
 
   const map = (t: RawTx): OverviewTransaction => ({
@@ -153,6 +158,7 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
     account: accountName.get(t.account) || t.account,
     isExcluded: isExcludedAccount(t) || isTransfer(t),
     counted: counted(t),
+    income: isIncome(t),
   });
 
   const now = new Date();
@@ -166,7 +172,7 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
     let inc = 0, exp = 0;
     for (const t of kpiTrans) {
       if (!t.date.startsWith(k)) continue;
-      if (t.amount > 0) { inc += t.amount; continue; }
+      if (t.income) { inc += t.amount; continue; }
       exp -= t.amount;
       cats[t.category] = (cats[t.category] || 0) - t.amount;
     }
@@ -176,12 +182,12 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
   const year = now.getFullYear();
   const fullMonthsYTD = Math.max(now.getMonth(), 1);
   const ytdFull = kpiTrans.filter(t => t.date.startsWith(`${year}`) && t.date < `${currentMonth}-01`);
-  const sum = (ts: OverviewTransaction[], sign: number) => ts.filter(t => sign * t.amount > 0).reduce((a, t) => a + t.amount, 0);
+  const sum = (ts: OverviewTransaction[], income: boolean) => ts.filter(t => !!t.income === income).reduce((a, t) => a + t.amount, 0);
   const averages = {
-    ytdIncome: sum(ytdFull, 1) / fullMonthsYTD,
-    ytdExpense: Math.abs(sum(ytdFull, -1)) / fullMonthsYTD,
-    ltmIncome: sum(kpiTrans, 1) / 12,
-    ltmExpense: Math.abs(sum(kpiTrans, -1)) / 12,
+    ytdIncome: sum(ytdFull, true) / fullMonthsYTD,
+    ytdExpense: -sum(ytdFull, false) / fullMonthsYTD,
+    ltmIncome: sum(kpiTrans, true) / 12,
+    ltmExpense: -sum(kpiTrans, false) / 12,
   };
 
   const categoryGroup: Record<string, string> = {};
