@@ -110,8 +110,11 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
 
     // Category ranking + colors for the KPI month
     const catView = useMemo(() => {
-        const entries = Object.entries(mi.categories).sort((a, b) => b[1] - a[1]);
+        // Refunds net into their category, so a category can end the month at zero or below. The header
+        // keeps the net total (it matches the Expenses KPI); shares and bars use the positive spend only.
+        const entries = Object.entries(mi.categories).filter(([, v]) => Math.abs(v) >= 0.005).sort((a, b) => b[1] - a[1]);
         const total = entries.reduce((a, [, v]) => a + v, 0);
+        const gross = entries.reduce((a, [, v]) => a + Math.max(v, 0), 0) || 1;
         const color: Record<string, string> = {};
         entries.forEach(([c], i) => { color[c] = PALETTE[i] ?? OTHER; });
         const groups = new Map<string, number>();
@@ -120,7 +123,8 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
             groups.set(g, (groups.get(g) || 0) + v);
         }
         return {
-            entries, total, color,
+            entries, total, gross, color,
+            spend: entries.filter(([, v]) => v > 0),
             max: entries[0]?.[1] || 1,
             groups: Array.from(groups.entries()).sort((a, b) => b[1] - a[1]),
             spark: Object.fromEntries(entries.map(([c]) => {
@@ -157,7 +161,8 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
             if (!t.counted || t.income || (month && !t.date.startsWith(month))) continue;
             for (const g of txTags.get(t.id) || []) sums.set(g, (sums.get(g) || 0) - t.amount);
         }
-        const entries = Array.from(sums.entries()).sort((a, b) => b[1] - a[1]);
+        // A fully refunded tag nets to zero or below: leave it out so the shares stay within 0–100%.
+        const entries = Array.from(sums.entries()).filter(([, v]) => v >= 0.005).sort((a, b) => b[1] - a[1]);
         const total = entries.reduce((a, [, v]) => a + v, 0);
         return { entries, total, color: Object.fromEntries(entries.map(([g], i) => [g, TAG_PALETTE[i % TAG_PALETTE.length]])) as Record<string, string> };
     }, [data.transactions, txTags, month]);
@@ -241,7 +246,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                             <span className="hidden lg:block h-1 rounded bg-[#1a2332]">
                                                 <span
                                                     className="block h-1 rounded bg-rose-400 transition-[width,opacity] duration-300"
-                                                    style={{ width: `${(m.expense / monthScale.maxExp) * 100}%`, opacity: month && !sel ? 0.35 : 0.9 }}
+                                                    style={{ width: `${(Math.max(m.expense, 0) / monthScale.maxExp) * 100}%`, opacity: month && !sel ? 0.35 : 0.9 }}
                                                 />
                                             </span>
                                             <span className={`${num} text-right text-[11.5px] font-semibold`} style={{ color: n >= 0 ? NET : EXP }}>{signed(n, short)}</span>
@@ -269,7 +274,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                                 <span className={`${num} text-[11.5px] text-[#9aa6b6]`}>{eur0(v)}</span>
                                             </span>
                                             <span className="hidden lg:block w-full h-[3px] rounded bg-[#1a2332]">
-                                                <span className="block h-[3px] rounded bg-blue-400 transition-[width] duration-300" style={{ width: `${catView.total ? (v / catView.total) * 100 : 0}%` }} />
+                                                <span className="block h-[3px] rounded bg-blue-400 transition-[width] duration-300" style={{ width: `${(Math.max(v, 0) / catView.gross) * 100}%` }} />
                                             </span>
                                         </button>
                                     );
@@ -387,7 +392,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                     <span className={`${num} text-[13px] font-semibold text-rose-400`}>{eur(catView.total)}</span>
                                 </div>
                                 <div role="group" aria-label="Category share" className="flex gap-0.5 h-3.5 mb-2.5">
-                                    {catView.entries.slice(0, 7).map(([c, v]) => (
+                                    {catView.spend.slice(0, 7).map(([c, v]) => (
                                         <button
                                             key={c}
                                             type="button"
@@ -395,11 +400,11 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                             title={`${c} · ${eur(v)}`}
                                             aria-label={c}
                                             className={`h-3.5 rounded-[3px] transition-[opacity,filter] duration-150 hover:brightness-125 touch-manipulation ${focus}`}
-                                            style={{ width: `${(v / catView.total) * 100}%`, background: catView.color[c], opacity: cat && cat !== c ? 0.25 : 1 }}
+                                            style={{ width: `${(v / catView.gross) * 100}%`, background: catView.color[c], opacity: cat && cat !== c ? 0.25 : 1 }}
                                         />
                                     ))}
-                                    {catView.entries.length > 7 && (
-                                        <span className="h-3.5 rounded-[3px]" style={{ width: `${(catView.entries.slice(7).reduce((a, [, v]) => a + v, 0) / catView.total) * 100}%`, background: OTHER, opacity: cat ? 0.25 : 1 }} />
+                                    {catView.spend.length > 7 && (
+                                        <span className="h-3.5 rounded-[3px]" style={{ width: `${(catView.spend.slice(7).reduce((a, [, v]) => a + v, 0) / catView.gross) * 100}%`, background: OTHER, opacity: cat ? 0.25 : 1 }} />
                                     )}
                                 </div>
                                 <div className={`grid grid-cols-[minmax(0,1fr)_96px_44px_90px] gap-2.5 px-1.5 pb-1 ${label}`}>
@@ -428,7 +433,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                                         <span key={i} className="w-1.5 rounded-[1px]" style={{ height: `${Math.max(1, (x / sp.max) * 18)}px`, background: data.months[i].key === km ? catView.color[c] : '#3a4658' }} />
                                                     ))}
                                                 </span>
-                                                <span className={`${num} text-right text-[11.5px] text-[#9aa6b6]`}>{((v / catView.total) * 100).toFixed(1)}%</span>
+                                                <span className={`${num} text-right text-[11.5px] text-[#9aa6b6]`}>{v > 0 ? `${((v / catView.gross) * 100).toFixed(1)}%` : '–'}</span>
                                                 <span className={`${num} text-right text-xs`}>{eur(v)}</span>
                                             </button>
                                         );
@@ -495,7 +500,7 @@ function BarCell({ value, scale, color, textColor, dim, fmt }: { value: number; 
             <span className="flex-1 h-[7px] rounded-sm bg-[#16202d] overflow-hidden">
                 <span
                     className="block h-[7px] rounded-sm transition-[width,opacity] duration-300"
-                    style={{ width: `${Math.min(value / scale, 1) * 100}%`, background: color, opacity: dim ? 0.3 : 0.9 }}
+                    style={{ width: `${Math.min(Math.max(value, 0) / scale, 1) * 100}%`, background: color, opacity: dim ? 0.3 : 0.9 }}
                 />
             </span>
             <span className={`${num} w-[74px] shrink-0 text-right text-[11.5px] whitespace-nowrap`} style={{ color: textColor }} title={clipped ? 'Bar capped: one-off spike' : undefined}>
