@@ -10,6 +10,7 @@ export { isDemo };
 export interface Settings {
   actualUrl: string;
   excludedAccounts: string[]; // names or ids, lower-cased
+  excludedCategories: string[]; // names or ids, lower-cased
   hiddenTags: string[];       // lower-cased, with '#'
   locale: string;
   currency: string;
@@ -18,7 +19,7 @@ export interface Settings {
 }
 
 export type EditableSettings = Omit<Settings, 'actualUrl'>;
-export const EDITABLE: (keyof EditableSettings)[] = ['excludedAccounts', 'hiddenTags', 'locale', 'currency', 'historySince', 'syncIntervalMin'];
+export const EDITABLE: (keyof EditableSettings)[] = ['excludedAccounts', 'excludedCategories', 'hiddenTags', 'locale', 'currency', 'historySince', 'syncIntervalMin'];
 
 export class InvalidSetting extends Error {}
 
@@ -46,6 +47,7 @@ export function envSettings(): Settings {
   return {
     actualUrl: isDemo() ? '' : (e.ACTUAL_SERVER_URL || '').replace(/\/$/, ''),
     excludedAccounts: list(e.EXCLUDED_ACCOUNTS),
+    excludedCategories: list(e.EXCLUDED_CATEGORIES),
     hiddenTags: list(e.HIDDEN_TAGS ?? (isDemo() ? '#auto' : '')).map(tag),
     locale: fmt ? e.LOCALE || 'en-US' : 'en-US',
     currency: fmt ? e.CURRENCY || 'EUR' : 'EUR',
@@ -85,6 +87,7 @@ function strList(v: unknown, name: string): string[] {
 function validate(b: Record<string, unknown>): Partial<EditableSettings> {
   const out: Partial<EditableSettings> = {};
   if (b.excludedAccounts !== undefined) out.excludedAccounts = strList(b.excludedAccounts, 'Excluded accounts');
+  if (b.excludedCategories !== undefined) out.excludedCategories = strList(b.excludedCategories, 'Excluded categories');
   if (b.hiddenTags !== undefined) {
     const ts = strList(b.hiddenTags, 'Hidden tags').map(tag);
     const bad = ts.find(t => !TAG_OK.test(t));

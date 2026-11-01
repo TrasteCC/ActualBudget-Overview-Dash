@@ -48,7 +48,7 @@ The bundled Actual API must match your actual-server's major version. Image tags
 
 ## Configuration
 
-The gear icon opens the settings page: excluded accounts, hidden tags, number format, history start and
+The gear icon opens the settings page: excluded accounts and categories, hidden tags, number format, history start and
 sync interval. Changes apply at once and are saved to `/data/settings.json`. The environment
 variables below are the defaults; **Reset to defaults** on the settings page goes back to them, and
 headless setups can use env alone.
@@ -67,13 +67,16 @@ headless setups can use env alone.
 | `ACTUAL_DATA_DIR` | `/data` in the image | Budget cache and `settings.json` (mount a volume here) |
 | `SYNC_INTERVAL_MIN` | `15` | Pull server changes every N minutes (the refresh button syncs now) |
 | `EXCLUDED_ACCOUNTS` | unset | Accounts left out of KPIs, by name or id, comma-separated. Off-budget accounts are always excluded |
+| `EXCLUDED_CATEGORIES` | unset | Categories left out of KPIs, by name or id, comma-separated (e.g. savings or investment contributions) |
 | `HIDDEN_TAGS` | unset | Tags hidden from the tag strip (automation markers), comma-separated |
 | `LOCALE` / `CURRENCY` | `en-US` / `EUR` | Number formatting |
 | `HISTORY_SINCE` | 13 months ago | Earliest date loaded from the budget |
 | `DEMO` | `0` | `1` serves a made-up budget, no Actual server needed (see below) |
 
-Transfers between accounts and starting balances never count in the KPIs; transfers and
-excluded-account rows still appear in the list, greyed out.
+Transfers between accounts and starting balances never count in the KPIs. A transfer to an off-budget
+account that carries a category (a mortgage payment, a savings contribution) counts like any other
+expense, as in Actual; leave the category out with `EXCLUDED_CATEGORIES` if it is money set aside
+rather than spent. Transfers and excluded rows still appear in the list, greyed out.
 
 ## API for other dashboards
 
