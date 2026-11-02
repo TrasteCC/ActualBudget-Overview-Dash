@@ -16,7 +16,16 @@ case "$GITHUB_REF" in
     ;;
   refs/heads/main)
     tag="v$api"
-    if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then exit 0; fi
+    if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+      # Already released, unless that tag was pushed by hand on a commit with another API version
+      # (its own run refused it). Say so, rather than never releasing this version.
+      tagged=$(git show "$tag:package.json" | node -p "JSON.parse(require('fs').readFileSync(0)).dependencies['@actual-app/api']")
+      if [ "$tagged" != "$api" ]; then
+        echo "::error::$tag is on a commit with @actual-app/api $tagged; delete that tag so $api can be released"
+        exit 1
+      fi
+      exit 0
+    fi
     create=true
     ;;
   *) exit 0 ;;
@@ -33,14 +42,17 @@ if [ "$base" != "$api" ]; then
   exit 1
 fi
 
-# Actual versions already released, plus this one.
-versions=$({ git tag -l 'v*'; echo "$tag"; } | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)(-r[0-9]+)?$/\1/p' | sort -uV)
-newest=$(tail -n1 <<<"$versions")
-newest_in_line=$(grep -E "^${line//./\\.}\.[0-9]+$" <<<"$versions" | tail -n1)
+# Releases as X.Y.Z.N, N being the dashboard revision (0 for the Actual release itself), so
+# v26.11.0-r2 ranks above v26.11.0-r1 and an older fix pushed later doesn't move X.Y or latest back.
+key() { sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)(-r([0-9]+))?$/\1.\3/p' | sed 's/\.$/.0/'; }
+self=$(key <<<"$tag")
+releases=$({ git tag -l 'v*'; echo "$tag"; } | key | sort -uV)
+newest=$(tail -n1 <<<"$releases")
+newest_in_line=$(grep -E "^${line//./\\.}\." <<<"$releases" | tail -n1)
 
 echo "tag=$tag"
 echo "version=${tag#v}"
 echo "create=$create"
-[ "$base" = "$newest_in_line" ] && echo "line=$line"
-[ "$base" = "$newest" ] && echo "latest=true"
+[ "$self" = "$newest_in_line" ] && echo "line=$line"
+[ "$self" = "$newest" ] && echo "latest=true"
 exit 0
