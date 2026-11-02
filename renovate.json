@@ -8,8 +8,12 @@
       "groupName": "Actual API",
       "rangeStrategy": "pin",
       "labels": ["actual-release"],
+      "minimumReleaseAge": "3 days",
+      "internalChecksFilter": "strict",
+      "automerge": true,
+      "platformAutomerge": false,
       "prBodyNotes": [
-        "Image tags follow Actual's version. After merging, tag the merge commit `v{{{newVersion}}}` so the workflow publishes the matching image tags."
+        "Merges itself once the release is 3 days old and the image build passes. The merge publishes `v{{{newVersion}}}` and the matching image tags."
       ]
     },
     {
