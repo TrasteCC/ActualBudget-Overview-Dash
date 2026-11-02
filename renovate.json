@@ -11,6 +11,12 @@
       "prBodyNotes": [
         "Image tags follow Actual's version. After merging, tag the merge commit `v{{{newVersion}}}` so the workflow publishes the matching image tags."
       ]
+    },
+    {
+      "description": "Keep Renovate's own npm on 10: npm 12 can't update this lockfile (EALLOWREMOTE, npm/cli#9800)",
+      "matchManagers": ["renovate-config"],
+      "matchDepNames": ["npm"],
+      "enabled": false
     }
   ]
 }
