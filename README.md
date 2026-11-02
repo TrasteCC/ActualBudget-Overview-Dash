@@ -76,7 +76,9 @@ headless setups can use env alone.
 Transfers between accounts and starting balances never count in the KPIs. A transfer to an off-budget
 account that carries a category (a mortgage payment, a savings contribution) counts like any other
 expense, as in Actual; leave the category out with `EXCLUDED_CATEGORIES` if it is money set aside
-rather than spent. Transfers and excluded rows still appear in the list, greyed out.
+rather than spent. Those categories then get their own **Set aside** column in the monthly summary,
+net of withdrawals (a month where more came back out shows in amber). Transfers and excluded rows
+still appear in the list, greyed out.
 
 ## API for other dashboards
 

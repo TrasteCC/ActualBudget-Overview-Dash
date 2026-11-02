@@ -49,12 +49,13 @@ export interface OverviewTransaction {
 
 export interface OverviewData {
   currentMonth: string;
-  months: { key: string; income: number; expense: number; categories: Record<string, number> }[];
+  // aside: net outflow to EXCLUDED_CATEGORIES (money set aside, e.g. savings); negative when money came back.
+  months: { key: string; income: number; expense: number; aside: number; categories: Record<string, number> }[];
   averages: { ytdIncome: number; ytdExpense: number; ltmIncome: number; ltmExpense: number };
   categoryGroup: Record<string, string>;
   transactions: OverviewTransaction[];
   metadata: { updated: string; allCategories: { id: string; name: string }[]; allPayees: { id: string; name: string }[] };
-  settings: { actualUrl: string; hiddenTags: string[]; locale: string; currency: string; demo: boolean };
+  settings: { actualUrl: string; hiddenTags: string[]; locale: string; currency: string; demo: boolean; setAside: boolean };
 }
 
 // On globalThis so every route bundle shares one snapshot (the settings route invalidates it).
@@ -172,17 +173,20 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
   const currentMonth = monthKeys[11];
   const windowTrans = rawTrans.filter(t => t.date >= `${monthKeys[0]}-01`);
   const kpiTrans = windowTrans.filter(counted).map(map);
+  const asideTrans = windowTrans.filter(t =>
+    !!t.category && excludedCategoryIds.has(t.category) && !excludedAccountIds.has(t.account) && !t.starting_balance_flag);
 
   const months = monthKeys.map(k => {
     const cats: Record<string, number> = {};
-    let inc = 0, exp = 0;
+    let inc = 0, exp = 0, aside = 0;
     for (const t of kpiTrans) {
       if (!t.date.startsWith(k)) continue;
       if (t.income) { inc += t.amount; continue; }
       exp -= t.amount;
       cats[t.category] = (cats[t.category] || 0) - t.amount;
     }
-    return { key: k, income: inc, expense: exp, categories: cats };
+    for (const t of asideTrans) if (t.date.startsWith(k)) aside -= t.amount / 100;
+    return { key: k, income: inc, expense: exp, aside, categories: cats };
   });
 
   const year = now.getFullYear();
@@ -219,6 +223,7 @@ export async function buildOverview(refresh = false, visitor?: string): Promise<
       locale: settings.locale,
       currency: settings.currency,
       demo: isDemo(),
+      setAside: excludedCategoryIds.size > 0,
     },
   };
 }
