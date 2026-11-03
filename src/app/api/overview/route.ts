@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { gzipSync } from 'node:zlib';
 import { buildOverview, editDemoTransaction, invalidateSnapshot } from '@/lib/server/overview';
 import { getActual } from '@/lib/server/actual';
 import { isDemo } from '@/lib/server/settings';
@@ -11,14 +10,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const refresh = request.nextUrl.searchParams.get('refresh') === '1';
-    const body = JSON.stringify(await buildOverview(refresh, demoVisitor(request)));
-    // ~1 MB of JSON; route handlers are not compressed by Next, so gzip here (~10x smaller).
-    if (request.headers.get('accept-encoding')?.includes('gzip')) {
-      return new NextResponse(new Uint8Array(gzipSync(body)), {
-        headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding' },
-      });
-    }
-    return new NextResponse(body, { headers: { 'Content-Type': 'application/json' } });
+    // Not gzipped here: since 16.4.5 Next drops Content-Encoding from route handlers, which would leave an undecodable body.
+    return NextResponse.json(await buildOverview(refresh, demoVisitor(request)));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[overview]', message);
