@@ -43,7 +43,7 @@ jobs:
             type=raw,value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.version != '' }}
             type=raw,value=${{ steps.release.outputs.line }},enable=${{ steps.release.outputs.line != '' }}
             type=raw,value=latest,enable=${{ steps.release.outputs.latest == 'true' }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
