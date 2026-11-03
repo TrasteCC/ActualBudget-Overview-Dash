@@ -30,6 +30,8 @@ const OTHER = '#94a3b8';
 const INC = '#34d399';
 const EXP = '#fb7185';
 const NET = '#60a5fa';
+const ASIDE = '#a78bfa'; // money set aside (excluded categories)
+const WITHDRAWN = '#fbbf24'; // money taken back out of savings
 const PAGE = 200;
 
 const signed = (v: number, f: (n: number) => string) => (v >= 0 ? '+' : '') + f(v);
@@ -181,6 +183,11 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
     const ytdExp = ytdMonths.reduce((a, m) => a + m.expense, 0);
     const ytdInc = ytdMonths.reduce((a, m) => a + m.income, 0);
     const ytdSpan = `Jan–${mShort(data.currentMonth)} ${yearKey}`;
+    // Money set aside (excluded categories): its own summary column, never part of the KPIs above.
+    const aside = data.settings.setAside;
+    const ytdAside = data.months.filter(m => m.key.startsWith(yearKey) && m.key <= data.currentMonth).reduce((a, m) => a + m.aside, 0);
+    const summaryCols = aside ? 'grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_78px_44px]' : 'grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_44px]';
+    const summaryMin = aside ? 'min-w-[650px]' : 'min-w-[560px]';
     // Three rows of three: the selected month, then expenses, then income.
     const kpis: { label: string; period: string; value: string; color: string; sub: string; active: boolean; onClick: () => void; ytd?: boolean }[] = [
         { label: 'Expenses', period: mLong(km), value: eur(mi.expense), color: EXP, sub: vsAvg(mi.expense, scoped.averages.ltmExpense), active: kind === 'exp' && !!month, onClick: () => { setKind('exp'); setMonth(km); } },
@@ -358,9 +365,14 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                     <h2 className="text-[13px] font-semibold">Monthly summary</h2>
                                     {scopeLabel && <span className="rounded-full border border-[#2c4a74] bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-[#bcd6fb]">{scopeLabel}</span>}
                                     <span className="text-[11.5px] text-[#75829a]">Click a row to filter · again to clear</span>
+                                    {aside && (
+                                        <span className={`ml-auto ${num} text-[11.5px] text-[#9aa6b6]`} title="Excluded categories (settings), net of withdrawals">
+                                            Set aside · YTD <span className="font-semibold" style={{ color: ytdAside < 0 ? WITHDRAWN : ASIDE }}>{signed(ytdAside, eur0)}</span>
+                                        </span>
+                                    )}
                                 </div>
-                                <div className={`grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_44px] gap-2.5 px-2 py-1 min-w-[560px] ${label}`}>
-                                    <span>Month</span><span>Income</span><span>Expenses</span><span className="text-right">Net</span><span className="text-right">Rate</span>
+                                <div className={`grid ${summaryCols} gap-2.5 px-2 py-1 ${summaryMin} ${label}`}>
+                                    <span>Month</span><span>Income</span><span>Expenses</span><span className="text-right">Net</span>{aside && <span className="text-right">Set aside</span>}<span className="text-right">Rate</span>
                                 </div>
                                 {scoped.months.map(m => {
                                     const n = m.income - m.expense;
@@ -373,12 +385,13 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                             type="button"
                                             onClick={() => pickMonth(m.key)}
                                             aria-pressed={sel}
-                                            className={`w-full min-w-[560px] grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_78px_44px] gap-2.5 items-center px-2 py-[5px] rounded border-l-2 text-left ${focus} ${hover} ${sel ? 'border-blue-400 bg-blue-500/10' : 'border-transparent'}`}
+                                            className={`w-full ${summaryMin} grid ${summaryCols} gap-2.5 items-center px-2 py-[5px] rounded border-l-2 text-left ${focus} ${hover} ${sel ? 'border-blue-400 bg-blue-500/10' : 'border-transparent'}`}
                                         >
                                             <span className="text-[12.5px] font-semibold text-[#c9d2de]">{mShort(m.key)} <span className="font-normal text-[#66738a]">{m.key.slice(2, 4)}</span></span>
                                             <BarCell value={m.income} scale={monthScale.cap} color={INC} textColor="#9ce5c6" dim={dim} fmt={F} />
                                             <BarCell value={m.expense} scale={monthScale.cap} color={EXP} textColor="#fcb3be" dim={dim} fmt={F} />
                                             <span className={`${num} text-right text-xs font-semibold`} style={{ color: n >= 0 ? NET : EXP }}>{signed(n, eur0)}</span>
+                                            {aside && <span className={`${num} text-right text-xs`} style={{ color: Math.abs(m.aside) < 0.5 ? '#66738a' : m.aside < 0 ? WITHDRAWN : ASIDE }}>{Math.abs(m.aside) < 0.5 ? '—' : signed(m.aside, eur0)}</span>}
                                             <span className={`${num} text-right text-[11.5px] text-[#9aa6b6]`}>{r !== null && r > -100 ? `${r.toFixed(0)}%` : '—'}</span>
                                         </button>
                                     );
