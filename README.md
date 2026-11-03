@@ -46,6 +46,11 @@ The bundled Actual API must match your actual-server's major version. Image tags
 `YY.M` scheme: run `ghcr.io/trastecc/actualbudget-overview-dash:26.9` against actual-server 26.9.x.
 `latest` is the newest release; `main` follows the main branch.
 
+Each new Actual release is picked up by Renovate and merged on its own once it is 3 days old and the
+image builds, which publishes `vYY.M.P`, `YY.M` and `latest`. A dashboard fix on a given Actual version
+is released as `vYY.M.P-rN` (`v26.11.0-r1`, `-r2`, ...), so it never collides with Actual's own patch
+releases. `YY.M` only moves to the newest version of that line, and `latest` only to the newest of all.
+
 ## Configuration
 
 The gear icon opens the settings page: excluded accounts and categories, hidden tags, number format, history start and
