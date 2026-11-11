@@ -1,36 +1,52 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { EditTransactionModal } from '@/components/edit-transaction-modal';
-import { OverviewWorkspace, OverviewData, OverviewTransaction } from '@/components/overview-workspace';
+import { OverviewWorkspace, OverviewData, OverviewTransaction, View } from '@/components/overview-workspace';
+
+// The view lives in the URL (?view=global|joint), so a link or a reload keeps it. Mine is the default.
+const urlView = (): View => {
+  const v = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('view');
+  return v === 'global' || v === 'joint' ? v : 'mine';
+};
 
 export default function OverviewPage() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<OverviewTransaction | null>(null);
+  const [view, setView] = useState<View>(urlView);
+  const latest = useRef(0);
 
-  // One request loads everything the Overview filters client-side.
+  // One request loads everything the Overview filters client-side, for one view.
   const load = useCallback(async (refresh = false) => {
+    const req = ++latest.current; // a quick view switch must not be overwritten by the previous view's reply
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/overview${refresh ? '?refresh=1' : ''}`, { cache: 'no-store' });
+      const res = await fetch(`/api/overview?view=${view}${refresh ? '&refresh=1' : ''}`, { cache: 'no-store' });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || `HTTP ${res.status}`);
-      setData(json);
+      if (req === latest.current) setData(json);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load data.');
+      if (req === latest.current) setError(e instanceof Error ? e.message : 'Failed to load data.');
     } finally {
-      setLoading(false);
+      if (req === latest.current) setLoading(false);
     }
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     const t = setTimeout(() => { void load(); }, 0);
     return () => clearTimeout(t);
   }, [load]);
+
+  const changeView = (v: View) => {
+    setView(v);
+    const url = new URL(window.location.href);
+    if (v === 'mine') url.searchParams.delete('view'); else url.searchParams.set('view', v);
+    window.history.replaceState(null, '', url);
+  };
 
   const handleSave = async (id: string, updates: Record<string, unknown>) => {
     const res = await fetch('/api/overview', {
@@ -71,7 +87,7 @@ export default function OverviewPage() {
           <button onClick={() => load(true)} className="font-bold uppercase tracking-wide hover:text-white">Retry</button>
         </div>
       )}
-      <OverviewWorkspace data={data} onRefresh={() => load(true)} refreshing={loading} onEdit={setEditing} />
+      <OverviewWorkspace data={data} onRefresh={() => load(true)} refreshing={loading} onEdit={setEditing} view={view} onView={changeView} />
       <EditTransactionModal
         key={editing?.id ?? 'none'}
         isOpen={!!editing}
