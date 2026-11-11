@@ -4,9 +4,9 @@ import React, { memo, useCallback, useDeferredValue, useMemo, useState } from 'r
 import Link from 'next/link';
 import { ExternalLink, Pencil, RefreshCw, Search, Settings as SettingsIcon, X } from 'lucide-react';
 import { makeFmt, Fmt } from '@/lib/format';
-import type { OverviewData, OverviewTransaction, View } from '@/lib/server/overview';
+import type { OverviewData, OverviewTransaction } from '@/lib/server/overview';
 
-export type { OverviewData, OverviewTransaction, View };
+export type { OverviewData, OverviewTransaction };
 
 // All filtering is client-side over one payload from /api/overview, so clicks never wait on the
 // network. Interaction feedback is CSS-only (colors/opacity/width transitions): no chart library.
@@ -16,8 +16,6 @@ interface Props {
     onRefresh: () => void;
     refreshing: boolean;
     onEdit: (t: OverviewTransaction) => void;
-    view: View;
-    onView: (v: View) => void;
 }
 
 type Kind = 'exp' | 'inc' | 'all';
@@ -37,9 +35,6 @@ const WITHDRAWN = '#fbbf24'; // money taken back out of savings
 const PAGE = 200;
 
 const signed = (v: number, f: (n: number) => string) => (v >= 0 ? '+' : '') + f(v);
-// What a row adds to the totals: in the Mine view a joint-account row counts only your share of it.
-const value = (t: OverviewTransaction) => t.amount * (t.share ?? 1);
-const pct = (share: number) => `${+(share * 100).toFixed(2)}%`;
 const mShort = (k: string) => MN[+k.slice(5) - 1];
 const mLong = (k: string) => `${MN[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
 const dayLabel = (d: string) => `${+d.slice(8)} ${MN[+d.slice(5, 7) - 1]}`;
@@ -51,7 +46,7 @@ const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:outli
 const label = 'text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#66738a]';
 const num = 'font-mono tabular-nums';
 
-export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit, view, onView }: Props) {
+export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props) {
     const F = useMemo(() => makeFmt(data.settings.locale, data.settings.currency), [data.settings.locale, data.settings.currency]);
     const { money: eur, money0: eur0, short } = F;
     const hiddenTags = useMemo(() => new Set(data.settings.hiddenTags), [data.settings.hiddenTags]);
@@ -81,10 +76,10 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit, view, o
             if (!t.counted) continue;
             const m = by.get(t.date.slice(0, 7));
             if (!m) continue;
-            if (tag && !t.income && hasTag(t, tag)) m.categories[t.category] = (m.categories[t.category] || 0) - value(t);
+            if (tag && !t.income && hasTag(t, tag)) m.categories[t.category] = (m.categories[t.category] || 0) - t.amount;
             if (!match(t)) continue;
-            if (t.income) { m.income += value(t); continue; }
-            m.expense -= value(t);
+            if (t.income) { m.income += t.amount; continue; }
+            m.expense -= t.amount;
         }
         const months = data.months.map(m => by.get(m.key)!);
         const cur = data.currentMonth;
@@ -157,7 +152,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit, view, o
             (!q || t.payee?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q)));
         if (sort === 'amount') tx = [...tx].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
         const counted = tx.filter(t => !t.isExcluded);
-        return { tx, sum: counted.reduce((a, t) => a + value(t), 0) };
+        return { tx, sum: counted.reduce((a, t) => a + t.amount, 0) };
     }, [data.transactions, data.categoryGroup, month, kind, cat, group, tag, hasTag, q, sort]);
 
     // Tag ranking for the active period (selected month, else the 12 months), counted expenses only.
@@ -166,7 +161,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit, view, o
         const sums = new Map<string, number>();
         for (const t of data.transactions) {
             if (!t.counted || t.income || (month && !t.date.startsWith(month))) continue;
-            for (const g of txTags.get(t.id) || []) sums.set(g, (sums.get(g) || 0) - value(t));
+            for (const g of txTags.get(t.id) || []) sums.set(g, (sums.get(g) || 0) - t.amount);
         }
         // A fully refunded tag nets to zero or below: leave it out so the shares stay within 0–100%.
         const entries = Array.from(sums.entries()).filter(([, v]) => v >= 0.005).sort((a, b) => b[1] - a[1]);
@@ -230,28 +225,6 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit, view, o
                         <SettingsIcon className="w-4 h-4" />
                     </Link>
                 </div>
-
-                {/* ── View: only with a joint account set in the settings ── */}
-                {data.settings.joint && (
-                    <div role="group" aria-label="View" className="shrink-0 flex gap-0.5 p-0.5 rounded-lg border border-[#1e2835]">
-                        {([
-                            ['global', 'Global', 'Every account'],
-                            ['joint', 'Joint', 'The joint accounts alone'],
-                            ['mine', 'Mine', `Your accounts plus ${data.settings.jointShare}% of each joint-account transaction`],
-                        ] as [View, string, string][]).map(([v, l, t]) => (
-                            <button
-                                key={v}
-                                type="button"
-                                onClick={() => onView(v)}
-                                aria-pressed={view === v}
-                                title={t}
-                                className={`flex-1 rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 touch-manipulation ${focus} ${view === v ? 'bg-[#1d2a3d] text-[#e6ebf2]' : 'text-[#8a96a8] hover:text-[#c9d2de]'}`}
-                            >
-                                {l}
-                            </button>
-                        ))}
-                    </div>
-                )}
 
                 {(
                     <>
@@ -624,13 +597,8 @@ const TransactionsPanel = memo(function TransactionsPanel({ rows, sum, limit, on
                                 <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: color }} />
                                 <span className="truncate">{t.category}</span>
                             </button>
-                            <span className={`${num} flex flex-col items-end text-[13px] font-semibold`} style={{ color: excluded ? '#8391a5' : t.amount > 0 ? INC : EXP }}>
-                                {signed(value(t), eur)}
-                                {t.share !== undefined && (
-                                    <span className="text-[10.5px] font-medium text-[#75829a] whitespace-nowrap" title="Your share of the joint-account transaction">
-                                        {pct(t.share)} of {eur(Math.abs(t.amount))}
-                                    </span>
-                                )}
+                            <span className={`${num} text-right text-[13px] font-semibold`} style={{ color: excluded ? '#8391a5' : t.amount > 0 ? INC : EXP }}>
+                                {signed(t.amount, eur)}
                             </span>
                             <button
                                 type="button"

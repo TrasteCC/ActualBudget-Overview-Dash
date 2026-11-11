@@ -8,11 +8,6 @@ import { getSettings, isDemo, Settings } from './settings';
 
 const SNAPSHOT_TTL_MS = 2 * 60 * 1000;
 
-// Global: every counted account. Joint: the joint accounts alone. Mine: your own accounts plus your share
-// (settings) of each joint-account transaction, in its own category; the partner's deposits are left out.
-export type View = 'global' | 'joint' | 'mine';
-export const parseView = (v: string | null | undefined): View => (v === 'joint' || v === 'mine' ? v : 'global');
-
 export interface RawTx {
   id: string;
   date: string;
@@ -50,8 +45,6 @@ export interface OverviewTransaction {
   counted?: boolean;
   // Income side: an income category, or an uncategorized inflow. Refunds in an expense category stay expenses.
   income?: boolean;
-  // Mine view: the part of this joint-account row that is yours. Totals count amount × share; amount stays whole.
-  share?: number;
 }
 
 export interface OverviewData {
@@ -62,11 +55,7 @@ export interface OverviewData {
   categoryGroup: Record<string, string>;
   transactions: OverviewTransaction[];
   metadata: { updated: string; allCategories: { id: string; name: string }[]; allPayees: { id: string; name: string }[] };
-  settings: {
-    actualUrl: string; hiddenTags: string[]; locale: string; currency: string; demo: boolean; setAside: boolean;
-    // joint: some account is set as joint, so the Joint and Mine views exist. view: the one this payload is.
-    joint: boolean; view: View; jointShare: number;
-  };
+  settings: { actualUrl: string; hiddenTags: string[]; locale: string; currency: string; demo: boolean; setAside: boolean };
 }
 
 // On globalThis so every route bundle shares one snapshot (the settings route invalidates it).
@@ -133,7 +122,7 @@ export async function editDemoTransaction(id: string, fields: Record<string, unk
 
 const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-export async function buildOverview(refresh = false, visitor?: string, requested: View = 'global'): Promise<OverviewData> {
+export async function buildOverview(refresh = false, visitor?: string): Promise<OverviewData> {
   const settings = getSettings(visitor);
   const snap = await getSnapshot(settings, refresh);
   const edits = demoEdits.get(visitor);
@@ -159,37 +148,10 @@ export async function buildOverview(refresh = false, visitor?: string, requested
       .filter(c => settings.excludedCategories.includes(c.id) || settings.excludedCategories.includes(c.name.toLowerCase()))
       .map(c => c.id),
   );
-  const jointIds = new Set(
-    snap.accounts
-      .filter(a => settings.jointAccounts.includes(a.id) || settings.jointAccounts.includes(a.name.toLowerCase()))
-      .map(a => a.id),
-  );
-  const partnerCategoryIds = new Set(
-    snap.categories
-      .filter(c => settings.partnerIncomeCategories.includes(c.id) || settings.partnerIncomeCategories.includes(c.name.toLowerCase()))
-      .map(c => c.id),
-  );
-  const view: View = jointIds.size ? requested : 'global';
-  const share = settings.jointShare / 100;
-  // How much of a row this view counts: 1 in full, 0 not at all, or your share of a joint-account row.
-  const part = (t: RawTx): number => {
-    if (view === 'global') return 1;
-    const joint = jointIds.has(t.account);
-    if (view === 'joint') return joint ? 1 : 0;
-    if (t.category && partnerCategoryIds.has(t.category)) return 0;
-    return joint ? share : 1;
-  };
   const isExcludedRow = (t: RawTx) => excludedAccountIds.has(t.account) || (!!t.category && excludedCategoryIds.has(t.category));
   const isTransfer = (t: RawTx) => !t.category && (!!t.transfer_id || (!!t.payee && transferPayees.has(t.payee)));
   const isIncome = (t: RawTx) => (t.category ? incomeCategories.has(t.category) : t.amount > 0);
-  // Transfers stay uncounted in every view: money moved into a joint account is never spending.
-  const counted = (t: RawTx) => !isExcludedRow(t) && !isTransfer(t) && !t.starting_balance_flag && part(t) > 0;
-  // The list: Joint shows only joint-account rows; Mine leaves out the joint rows it doesn't count.
-  const listed = (t: RawTx) => {
-    if (view === 'global') return true;
-    const joint = jointIds.has(t.account);
-    return view === 'joint' ? joint : !joint || counted(t);
-  };
+  const counted = (t: RawTx) => !isExcludedRow(t) && !isTransfer(t) && !t.starting_balance_flag;
 
   const map = (t: RawTx): OverviewTransaction => ({
     id: t.id,
@@ -201,12 +163,10 @@ export async function buildOverview(refresh = false, visitor?: string, requested
     categoryId: t.category || undefined,
     notes: t.notes || '',
     account: accountName.get(t.account) || t.account,
-    isExcluded: isExcludedRow(t) || isTransfer(t) || part(t) === 0,
+    isExcluded: isExcludedRow(t) || isTransfer(t),
     counted: counted(t),
     income: isIncome(t),
-    ...(part(t) > 0 && part(t) < 1 ? { share: part(t) } : {}),
   });
-  const value = (t: OverviewTransaction) => t.amount * (t.share ?? 1);
 
   const now = new Date();
   const monthKeys = Array.from({ length: 12 }, (_, i) => monthKey(new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)));
@@ -214,25 +174,25 @@ export async function buildOverview(refresh = false, visitor?: string, requested
   const windowTrans = rawTrans.filter(t => t.date >= `${monthKeys[0]}-01`);
   const kpiTrans = windowTrans.filter(counted).map(map);
   const asideTrans = windowTrans.filter(t =>
-    !!t.category && excludedCategoryIds.has(t.category) && !excludedAccountIds.has(t.account) && !t.starting_balance_flag && part(t) > 0);
+    !!t.category && excludedCategoryIds.has(t.category) && !excludedAccountIds.has(t.account) && !t.starting_balance_flag);
 
   const months = monthKeys.map(k => {
     const cats: Record<string, number> = {};
     let inc = 0, exp = 0, aside = 0;
     for (const t of kpiTrans) {
       if (!t.date.startsWith(k)) continue;
-      if (t.income) { inc += value(t); continue; }
-      exp -= value(t);
-      cats[t.category] = (cats[t.category] || 0) - value(t);
+      if (t.income) { inc += t.amount; continue; }
+      exp -= t.amount;
+      cats[t.category] = (cats[t.category] || 0) - t.amount;
     }
-    for (const t of asideTrans) if (t.date.startsWith(k)) aside -= (t.amount * part(t)) / 100;
+    for (const t of asideTrans) if (t.date.startsWith(k)) aside -= t.amount / 100;
     return { key: k, income: inc, expense: exp, aside, categories: cats };
   });
 
   const year = now.getFullYear();
   const fullMonthsYTD = Math.max(now.getMonth(), 1);
   const ytdFull = kpiTrans.filter(t => t.date.startsWith(`${year}`) && t.date < `${currentMonth}-01`);
-  const sum = (ts: OverviewTransaction[], income: boolean) => ts.filter(t => !!t.income === income).reduce((a, t) => a + value(t), 0);
+  const sum = (ts: OverviewTransaction[], income: boolean) => ts.filter(t => !!t.income === income).reduce((a, t) => a + t.amount, 0);
   const averages = {
     ytdIncome: sum(ytdFull, true) / fullMonthsYTD,
     ytdExpense: -sum(ytdFull, false) / fullMonthsYTD,
@@ -244,7 +204,7 @@ export async function buildOverview(refresh = false, visitor?: string, requested
   for (const c of snap.categories) categoryGroup[c.name] = groupName.get(c.group_id) || 'Other';
 
   // The list keeps excluded-account rows and transfers (greyed out); only starting balances are dropped.
-  const transactions = windowTrans.filter(t => !t.starting_balance_flag && listed(t)).map(map).sort((a, b) => b.date.localeCompare(a.date));
+  const transactions = windowTrans.filter(t => !t.starting_balance_flag).map(map).sort((a, b) => b.date.localeCompare(a.date));
 
   return {
     currentMonth,
@@ -264,9 +224,6 @@ export async function buildOverview(refresh = false, visitor?: string, requested
       currency: settings.currency,
       demo: isDemo(),
       setAside: excludedCategoryIds.size > 0,
-      joint: jointIds.size > 0,
-      view,
-      jointShare: settings.jointShare,
     },
   };
 }

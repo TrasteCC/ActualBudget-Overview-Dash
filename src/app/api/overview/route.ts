@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildOverview, editDemoTransaction, invalidateSnapshot, parseView } from '@/lib/server/overview';
+import { buildOverview, editDemoTransaction, invalidateSnapshot } from '@/lib/server/overview';
 import { getActual } from '@/lib/server/actual';
 import { isDemo } from '@/lib/server/settings';
 import { claimVisitor, demoVisitor, withVisitor } from '@/lib/server/demo-state';
@@ -9,10 +9,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const params = request.nextUrl.searchParams;
-    // ?view=joint|mine; without it the API keeps returning the Global view.
+    const refresh = request.nextUrl.searchParams.get('refresh') === '1';
     // Not gzipped here: since 16.4.5 Next drops Content-Encoding from route handlers, which would leave an undecodable body.
-    return NextResponse.json(await buildOverview(params.get('refresh') === '1', demoVisitor(request), parseView(params.get('view'))));
+    return NextResponse.json(await buildOverview(refresh, demoVisitor(request)));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[overview]', message);
