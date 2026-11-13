@@ -53,8 +53,8 @@ releases. `YY.M` only moves to the newest version of that line, and `latest` onl
 
 ## Configuration
 
-The gear icon opens the settings page: excluded accounts and categories, hidden tags, number format, history start and
-sync interval. Changes apply at once and are saved to `/data/settings.json`. The environment
+The gear icon opens the settings page: excluded accounts and categories, joint accounts, hidden tags, number format,
+history start and sync interval. Changes apply at once and are saved to `/data/settings.json`. The environment
 variables below are the defaults; **Reset to defaults** on the settings page goes back to them, and
 headless setups can use env alone.
 
@@ -73,6 +73,9 @@ headless setups can use env alone.
 | `SYNC_INTERVAL_MIN` | `15` | Pull server changes every N minutes (the refresh button syncs now) |
 | `EXCLUDED_ACCOUNTS` | unset | Accounts left out of KPIs, by name or id, comma-separated. Off-budget accounts are always excluded |
 | `EXCLUDED_CATEGORIES` | unset | Categories left out of KPIs, by name or id, comma-separated (e.g. savings or investment contributions) |
+| `JOINT_ACCOUNTS` | unset | Accounts shared with someone else, by name or id, comma-separated. Adds the Joint and Mine views (see below) |
+| `JOINT_SHARE` | `87` | Your share of each joint-account transaction in the Mine view, in percent |
+| `PARTNER_INCOME_CATEGORIES` | unset | Income categories for the other holders' deposits into the joint accounts, left out of Mine |
 | `HIDDEN_TAGS` | unset | Tags hidden from the tag strip (automation markers), comma-separated |
 | `LOCALE` / `CURRENCY` | `en-US` / `EUR` | Number formatting |
 | `HISTORY_SINCE` | 13 months ago | Earliest date loaded from the budget |
@@ -85,6 +88,21 @@ rather than spent. Those categories then get their own **Set aside** column in t
 net of withdrawals (a month where more came back out shows in amber). Transfers and excluded rows
 still appear in the list, greyed out.
 
+### Joint accounts
+
+With `JOINT_ACCOUNTS` set, a selector at the top of the sidebar switches between three views, kept in
+the URL (`?view=global`, `?view=joint`; no parameter means Mine):
+
+- **Global** counts every account, as without joint accounts.
+- **Joint** counts the joint accounts alone, by category.
+- **Mine**, the default, counts your other accounts in full plus `JOINT_SHARE` percent of each
+  joint-account transaction, in that transaction's own category. The list shows your part, with the
+  share and the full amount under it. Deposits in `PARTNER_INCOME_CATEGORIES` are left out.
+
+Money you move into a joint account is a transfer, so it never counts as spending in any view: what
+counts is what the joint account spends, split into its categories. Your share plus the others' share
+of each joint transaction adds up to the Joint view.
+
 ## API for other dashboards
 
 `GET /api/summary` returns the current month's income, expenses, net and averages as a small JSON
@@ -95,6 +113,7 @@ object, for widgets in Homepage, Glance and the like. With `DASH_PASSWORD` set, 
 curl -H "Authorization: Bearer $API_TOKEN" http://<host>:3000/api/summary
 ```
 
+`GET /api/overview` returns the Global view; add `?view=joint` or `?view=mine` for the others.
 `GET /api/health` is always open (Docker healthcheck).
 
 ## Demo mode

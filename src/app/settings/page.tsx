@@ -12,6 +12,7 @@ interface State {
   overridden: (keyof EditableSettings)[];
   accounts: { id: string; name: string; offbudget: boolean }[];
   categories: { id: string; name: string }[];
+  incomeCategories: { id: string; name: string }[];
   accountsError: string | null;
   demo: boolean;
 }
@@ -19,6 +20,9 @@ interface State {
 interface Form {
   excluded: string[]; // account ids
   excludedCats: string[]; // category ids
+  joint: string[]; // account ids
+  jointShare: string;
+  partnerCats: string[]; // income category ids
   hiddenTags: string;
   locale: string;
   currency: string;
@@ -34,9 +38,14 @@ const input = `w-full h-9 px-3 rounded-[9px] bg-[#0e141d] border border-[#1e2835
 function toForm(s: State): Form {
   const ex = s.settings.excludedAccounts;
   const exCats = s.settings.excludedCategories;
+  const joint = s.settings.jointAccounts;
+  const partner = s.settings.partnerIncomeCategories;
   return {
     excluded: s.accounts.filter(a => !a.offbudget && (ex.includes(a.id.toLowerCase()) || ex.includes(a.name.toLowerCase()))).map(a => a.id),
     excludedCats: s.categories.filter(c => exCats.includes(c.id.toLowerCase()) || exCats.includes(c.name.toLowerCase())).map(c => c.id),
+    joint: s.accounts.filter(a => !a.offbudget && (joint.includes(a.id.toLowerCase()) || joint.includes(a.name.toLowerCase()))).map(a => a.id),
+    jointShare: String(s.settings.jointShare),
+    partnerCats: s.incomeCategories.filter(c => partner.includes(c.id.toLowerCase()) || partner.includes(c.name.toLowerCase())).map(c => c.id),
     hiddenTags: s.settings.hiddenTags.join(', '),
     locale: s.settings.locale,
     currency: s.settings.currency,
@@ -103,6 +112,9 @@ export default function SettingsPage() {
   const save = () => call('PUT', {
     excludedAccounts: form.excluded,
     excludedCategories: form.excludedCats,
+    jointAccounts: form.joint,
+    jointShare: form.jointShare,
+    partnerIncomeCategories: form.partnerCats,
     hiddenTags: form.hiddenTags,
     locale: form.locale,
     currency: form.currency,
@@ -172,6 +184,51 @@ export default function SettingsPage() {
             ))}
           </div>
           {hint('excludedCategories', d.excludedCategories.join(', '))}
+        </section>
+
+        <section className={`${panel} p-4 flex flex-col gap-3`}>
+          <div>
+            <h2 className="text-[13px] font-semibold">Joint accounts</h2>
+            <p className="text-xs text-[#8a96a8]">Accounts you share with someone else. They add two views to the overview: Joint (these accounts alone) and Mine (your other accounts plus your share of each joint transaction, in its own category). Transfers into them never count as spending.</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            {state.accounts.filter(a => !a.offbudget).map(a => (
+              <label key={a.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] hover:bg-white/[0.04] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.joint.includes(a.id)}
+                  onChange={e => set({ joint: e.target.checked ? [...form.joint, a.id] : form.joint.filter(id => id !== a.id) })}
+                  className="w-4 h-4 accent-blue-500"
+                />
+                <span className="flex-1">{a.name}</span>
+              </label>
+            ))}
+          </div>
+          {hint('jointAccounts', d.jointAccounts.join(', '))}
+          <label className="flex flex-col gap-1.5 sm:max-w-[50%]">
+            <span className="text-[13px] font-semibold">Your share (%)</span>
+            <input type="number" min={0} max={100} step="any" className={input} value={form.jointShare} onChange={e => set({ jointShare: e.target.value })} />
+            <span className="text-xs text-[#8a96a8]">The part of each joint transaction the Mine view counts, e.g. what you put in over the total.</span>
+            {hint('jointShare', String(d.jointShare))}
+          </label>
+          <div>
+            <h3 className="text-[13px] font-semibold">The other holders&apos; deposits</h3>
+            <p className="text-xs text-[#8a96a8]">Income categories for the money the others put into the joint accounts. Mine leaves them out.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-x-3 gap-y-1">
+            {state.incomeCategories.map(c => (
+              <label key={c.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] hover:bg-white/[0.04] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.partnerCats.includes(c.id)}
+                  onChange={e => set({ partnerCats: e.target.checked ? [...form.partnerCats, c.id] : form.partnerCats.filter(id => id !== c.id) })}
+                  className="w-4 h-4 accent-blue-500"
+                />
+                <span className="flex-1">{c.name}</span>
+              </label>
+            ))}
+          </div>
+          {hint('partnerIncomeCategories', d.partnerIncomeCategories.join(', '))}
         </section>
 
         <section className={`${panel} p-4`}>

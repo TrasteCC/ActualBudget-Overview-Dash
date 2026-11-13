@@ -11,6 +11,9 @@ export interface Settings {
   actualUrl: string;
   excludedAccounts: string[]; // names or ids, lower-cased
   excludedCategories: string[]; // names or ids, lower-cased
+  jointAccounts: string[];    // names or ids, lower-cased: accounts shared with someone else
+  jointShare: number;         // percent of each joint-account transaction that is yours (the Mine view)
+  partnerIncomeCategories: string[]; // names or ids, lower-cased: the other holders' deposits, left out of Mine
   hiddenTags: string[];       // lower-cased, with '#'
   locale: string;
   currency: string;
@@ -19,7 +22,7 @@ export interface Settings {
 }
 
 export type EditableSettings = Omit<Settings, 'actualUrl'>;
-export const EDITABLE: (keyof EditableSettings)[] = ['excludedAccounts', 'excludedCategories', 'hiddenTags', 'locale', 'currency', 'historySince', 'syncIntervalMin'];
+export const EDITABLE: (keyof EditableSettings)[] = ['excludedAccounts', 'excludedCategories', 'jointAccounts', 'jointShare', 'partnerIncomeCategories', 'hiddenTags', 'locale', 'currency', 'historySince', 'syncIntervalMin'];
 
 export class InvalidSetting extends Error {}
 
@@ -28,6 +31,7 @@ const list = (v: string | undefined) =>
   (v || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const tag = (v: string) => (v.startsWith('#') ? v : `#${v}`).toLowerCase();
 const TAG_OK = /^#[\p{L}\p{N}_-]+$/u;
+const shareOk = (n: number) => Number.isFinite(n) && n >= 0 && n <= 100;
 
 function defaultSince(): string {
   const d = new Date();
@@ -48,6 +52,9 @@ export function envSettings(): Settings {
     actualUrl: isDemo() ? '' : (e.ACTUAL_SERVER_URL || '').replace(/\/$/, ''),
     excludedAccounts: list(e.EXCLUDED_ACCOUNTS),
     excludedCategories: list(e.EXCLUDED_CATEGORIES),
+    jointAccounts: list(e.JOINT_ACCOUNTS),
+    jointShare: e.JOINT_SHARE && shareOk(Number(e.JOINT_SHARE)) ? Number(e.JOINT_SHARE) : 87,
+    partnerIncomeCategories: list(e.PARTNER_INCOME_CATEGORIES),
     hiddenTags: list(e.HIDDEN_TAGS ?? (isDemo() ? '#auto' : '')).map(tag),
     locale: fmt ? e.LOCALE || 'en-US' : 'en-US',
     currency: fmt ? e.CURRENCY || 'EUR' : 'EUR',
@@ -88,6 +95,14 @@ function validate(b: Record<string, unknown>): Partial<EditableSettings> {
   const out: Partial<EditableSettings> = {};
   if (b.excludedAccounts !== undefined) out.excludedAccounts = strList(b.excludedAccounts, 'Excluded accounts');
   if (b.excludedCategories !== undefined) out.excludedCategories = strList(b.excludedCategories, 'Excluded categories');
+  if (b.jointAccounts !== undefined) out.jointAccounts = strList(b.jointAccounts, 'Joint accounts');
+  if (b.jointShare !== undefined) {
+    const v = b.jointShare;
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+    if (!shareOk(n)) throw new InvalidSetting('Your share must be a percentage from 0 to 100');
+    out.jointShare = n;
+  }
+  if (b.partnerIncomeCategories !== undefined) out.partnerIncomeCategories = strList(b.partnerIncomeCategories, 'Partner income categories');
   if (b.hiddenTags !== undefined) {
     const ts = strList(b.hiddenTags, 'Hidden tags').map(tag);
     const bad = ts.find(t => !TAG_OK.test(t));
