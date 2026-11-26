@@ -159,14 +159,19 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
     // Independent of the tag filter itself so every tag stays pickable.
     const tagView = useMemo(() => {
         const sums = new Map<string, number>();
+        // Tagged spend, each transaction once: a transaction with two tags is in both sums but only once here.
+        let total = 0;
         for (const t of data.transactions) {
             if (!t.counted || t.income || (month && !t.date.startsWith(month))) continue;
-            for (const g of txTags.get(t.id) || []) sums.set(g, (sums.get(g) || 0) - t.amount);
+            const gs = txTags.get(t.id) || [];
+            if (gs.length) total -= t.amount;
+            for (const g of gs) sums.set(g, (sums.get(g) || 0) - t.amount);
         }
         // A fully refunded tag nets to zero or below: leave it out so the shares stay within 0–100%.
         const entries = Array.from(sums.entries()).filter(([, v]) => v >= 0.005).sort((a, b) => b[1] - a[1]);
-        const total = entries.reduce((a, [, v]) => a + v, 0);
-        return { entries, total, color: Object.fromEntries(entries.map(([g], i) => [g, TAG_PALETTE[i % TAG_PALETTE.length]])) as Record<string, string> };
+        // Tags overlap, so the sums can add up to more than the total: block widths are relative to each other.
+        const sum = entries.reduce((a, [, v]) => a + v, 0);
+        return { entries, total, sum, color: Object.fromEntries(entries.map(([g], i) => [g, TAG_PALETTE[i % TAG_PALETTE.length]])) as Record<string, string> };
     }, [data.transactions, txTags, month]);
 
     // Selection highlights paint immediately; the (heavier) list catches up as a deferred render.
@@ -472,7 +477,7 @@ export function OverviewWorkspace({ data, onRefresh, refreshing, onEdit }: Props
                                             title={`${g} · ${eur(v)} · ${((v / tagView.total) * 100).toFixed(1)}%`}
                                             aria-pressed={tag === g}
                                             className={`h-7 shrink-0 rounded-[4px] px-2 text-left text-[11.5px] font-semibold whitespace-nowrap text-[#0a0e15] transition-[opacity,filter] duration-150 hover:brightness-110 touch-manipulation ${focus} ${tag === g ? 'ring-2 ring-white/80 ring-inset' : ''}`}
-                                            style={{ width: `${(v / tagView.total) * 100}%`, minWidth: 'max-content', background: tagView.color[g], opacity: tag && tag !== g ? 0.3 : 1 }}
+                                            style={{ width: `${(v / tagView.sum) * 100}%`, minWidth: 'max-content', background: tagView.color[g], opacity: tag && tag !== g ? 0.3 : 1 }}
                                         >
                                             #{g.slice(1)}
                                         </button>
